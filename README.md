@@ -1,4 +1,4 @@
-# 🧠 FlowTeX ADHD Assistant
+# FlowTeX ADHD Assistant
 Adaptive typing support for neurodivergent users
 
 ## Features

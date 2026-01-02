@@ -1,0 +1,32 @@
+
+{
+  "manifest_version": 3,
+  "name": "EbbFlow ADHD Assistant",
+  "version": "1.0.0",
+  "description": "Adaptive writing support for ADHD/neurodivergent academics on Overleaf. ",
+  
+  "permissions": [
+    "storage",
+    "activeTab"
+  ],
+  
+  "background": {
+    "service_worker": "background.js"
+  },
+  
+  "content_scripts": [{
+    "matches": ["<all_urls>"],
+    "js": ["content.js"],
+    "run_at": "document_idle"
+  }],
+  
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "FlowTeX"
+  },
+  
+  "icons": {
+    "16": "icons/favicon_io/favicon-16x16.png",
+    "48": "icons/favicon_io/favicon-32x32.png"
+  }
+}
