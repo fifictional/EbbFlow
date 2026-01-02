@@ -1,0 +1,19 @@
+.vscode/
+*.code-workspace
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Node modules (if you add npm later)
+node_modules/
+npm-debug.log*
+
+# Secrets/keys
+.env
+*.pem
+*.key
+
+# Build artifacts
+dist/
+build/
