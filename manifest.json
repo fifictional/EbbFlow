@@ -22,11 +22,12 @@
   
   "action": {
     "default_popup": "popup.html",
-    "default_title": "FlowTeX"
+    "default_title": "EbbFlow"
   },
   
   "icons": {
     "16": "icons/favicon_io/favicon-16x16.png",
-    "48": "icons/favicon_io/favicon-32x32.png"
+    "48": "icons/favicon_io/android-chrome-192x192.png",
+    "128": "icons/favicon_io/android-chrome-512x512.png"
   }
 }

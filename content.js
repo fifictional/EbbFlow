@@ -1,51 +1,35 @@
-// logging only
-console.log("EbbFLow: Content script loaded!");
 
-class SimpleTracker {
-  constructor() {
-    this.keyLog = [];
-    this.startTime = Date.now();
-    this.setupListeners();
-  }
-  
-  setupListeners() {
-    //  track key presses 
-    document.addEventListener('keydown', (event) => {
-      this.logKey(event);
-    });
-    
-    // Track focus 
-    window.addEventListener('blur', () => {
-      console.log("FlowTeX: User switched tabs/windows");
-    });
-  }
-  
-  logKey(event) {
-    const logEntry = {
-      key: event.key,
-      timestamp: Date.now(),
-      target: event.target.tagName.toLowerCase()
-    };
-    
-    this.keyLog.push(logEntry);
-    
-    // Log every 10th keystroke to avoid spam
-    if (this.keyLog.length % 10 === 0) {
-      console.log("FlowTeX: Keystroke log:", this.keyLog.slice(-5));
-    }
-    
-    // Simple backspace detection
-    if (event.key === 'Backspace') {
-      console.log("FlowTeX: Backspace detected");
-    }
-  }
-}
+console.log("🔥🔥🔥 EBBFLOW CONTENT SCRIPT LOADED! 🔥🔥🔥");
+console.log("Testing at:", new Date().toLocaleTimeString());
+console.log("On URL:", window.location.href);
 
-// Start tracker when page loads
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', () => {
-    window.flowtexTracker = new SimpleTracker();
-  });
-} else {
-  window.flowtexTracker = new SimpleTracker();
-}
+// Add visible marker to page
+const marker = document.createElement('div');
+marker.innerHTML = `
+  <div style="
+    position: fixed;
+    top: 10px;
+    right: 10px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 12px 20px;
+    border-radius: 8px;
+    z-index: 999999;
+    font-family: Arial, sans-serif;
+    font-weight: bold;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    border: 2px solid white;
+  ">
+    🧠 EbbFlow ACTIVE
+  </div>
+`;
+document.body.appendChild(marker);
+
+// Track typing
+let keystrokes = 0;
+// document.addEventListener('keydown', (e) => {
+//   keystrokes++;
+//   console.log(`⌨️ Key #${keystrokes}: "${e.key}"`);
+// });
+
+console.log("✅ EbbFlow ready! Try typing...");
