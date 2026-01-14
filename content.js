@@ -1,361 +1,169 @@
-// EbbFlow Typing Analytics for ADHD Research
-// SAFE VERSION - No sensitive data collection
+// content.js 
 
-console.log("🧠 EbbFlow Analytics loaded");
+console.log("🎯 EBBFLOW loading on", window.location.href);
 
-// Initialize ErrorHighlighter if we're on Overleaf
-// if (window.location.hostname.includes('overleaf.com')) {
-//   import(chrome.runtime.getURL('actions/ErrorHighlighter.js'))
-//     .then(module => {
-//       const ErrorHighlighter = module.default;
-//       const errorHighlighter = new ErrorHighlighter();
-//       errorHighlighter.enable();
-//       console.log("🎯 EbbFlow: Error highlighting removed");
-//     })
-//     .catch(error => {
-//       console.error("❌ EbbFlow: Fa
-// iled to load ErrorHighlighter:", error);
-//     });
-// }
 
-class TypingAnalyzer {
-  constructor() {
-    this.resetSession();
-    this.setupListeners();
-  }
+// Only run on Google Docs
+if (window.location.hostname.includes('docs.google.com') && 
+    window.location.pathname.includes('/document/')) {
   
-  resetSession() {
-    this.session = {
-      startTime: Date.now(),
+  initEbbFlow();
+} else {
+  console.log("Not a Google Docs document page");
+}
+
+function initEbbFlow() {
+  try {
+    console.log("Initializing EbbFlow for Google Docs");
+    
+    // ========== SIMPLE TYPING ANALYSER ==========
+    let stats = {
       keystrokes: 0,
       backspaces: 0,
-      words: [],
-      currentWord: { text: '', startTime: 0, keystrokes: 0, backspaces: 0 },
-      
-      // Timing metrics
-      keyDownTimes: new Map(),
-      interKeyIntervals: [],
-      holdTimes: [],
-      pauses: [],
-      lastKeyDownTime: null,
-      
-      // Error metrics
-      corrections: [],
-      sameCharRepeats: 0,
-      lastChar: '',
-      
-      // Rhythm metrics
-      burstCount: 0,
-      inBurst: false,
-      burstStartTime: 0
+      startTime: Date.now()
     };
-  }
-  
-  setupListeners() {
-    document.addEventListener('keydown', (e) => this.onKeyDown(e));
-    document.addEventListener('keyup', (e) => this.onKeyUp(e));
-    document.addEventListener('input', (e) => this.onInput(e));
-  }
-  
-  // ===== 1. TIMING DATA =====
-  onKeyDown(event) {
-    const now = Date.now();
-    const key = event.key;
     
-    // Skip modifier keys, shortcuts
-    if (key.length > 1 && !['Backspace', 'Enter', ' ', 'Tab'].includes(key)) return;
-    
-    // Store keydown time for hold time calculation
-    this.session.keyDownTimes.set(key, now);
-    
-    // Calculate inter-key interval (if there was a previous key)
-    if (this.session.lastKeyDownTime) {
-      const interval = now - this.session.lastKeyDownTime;
-      this.session.interKeyIntervals.push(interval);
+    // Listen for typing
+    document.addEventListener('keydown', function(e) {
+      const isInEditor = e.target.isContentEditable || 
+                         e.target.closest('[contenteditable="true"]');
+      if (!isInEditor) return;
       
-      // PAUSE DETECTION (>1500ms)
-      if (interval > 1500) {
-        this.session.pauses.push({
-          duration: interval,
-          position: this.session.currentWord.text.length,
-          timestamp: now
+      stats.keystrokes++;
+      if (e.key === 'Backspace') stats.backspaces++;
+      console.log(`Keystroke ${stats.keystrokes}, Backspaces: ${stats.backspaces}`);
+    });
+    
+    // ========== SIMPLE FOCUS MODE ==========
+    let focusModeActive = false;
+    
+    function toggleFocusMode() {
+      focusModeActive = !focusModeActive;
+      console.log("Focus mode:", focusModeActive ? "ON" : "OFF");
+      
+      if (focusModeActive) {
+        // Hide distracting elements
+        document.querySelectorAll('.docs-titlebar-buttons, .docs-menubar').forEach(el => {
+          el.style.opacity = '0.3';
+          el.style.pointerEvents = 'none';
         });
-        console.log(`⏸️ Pause detected: ${interval}ms`);
-      }
-      
-      // BURST DETECTION (rapid typing < 200ms)
-      if (interval < 200) {
-        if (!this.session.inBurst) {
-          this.session.inBurst = true;
-          this.session.burstStartTime = now;
-          this.session.burstCount++;
-        }
       } else {
-        if (this.session.inBurst) {
-          this.session.inBurst = false;
-          const burstDuration = now - this.session.burstStartTime;
-          console.log(`⚡ Burst: ${burstDuration}ms`);
-        }
-      }
-    }
-    
-    this.session.lastKeyDownTime = now;
-    this.session.keystrokes++;
-    
-    // Track current word
-    if (this.session.currentWord.startTime === 0) {
-      this.session.currentWord.startTime = now;
-    }
-    this.session.currentWord.keystrokes++;
-  }
-  
-  onKeyUp(event) {
-    const key = event.key;
-    const keyDownTime = this.session.keyDownTimes.get(key);
-    
-    if (keyDownTime) {
-      const holdTime = Date.now() - keyDownTime;
-      this.session.holdTimes.push({
-        key: key === ' ' ? 'Space' : key,
-        duration: holdTime
-      });
-      this.session.keyDownTimes.delete(key);
-    }
-  }
-  
-  // ===== 2. ERROR PATTERNS =====
-  onInput(event) {
-    const target = event.target;
-    if (!target.isContentEditable && 
-        target.tagName !== 'TEXTAREA' && 
-        (target.tagName !== 'INPUT' || target.type === 'password')) return;
-    
-    const text = target.value || target.textContent || '';
-    const lastChar = text.charAt(text.length - 1);
-    
-    // BACKSPACE DETECTION
-    if (event.inputType === 'deleteContentBackward') {
-      this.session.backspaces++;
-      this.session.currentWord.backspaces++;
-      
-      // Record correction with timing
-      if (this.session.lastKeyDownTime) {
-        const correctionDelay = Date.now() - this.session.lastKeyDownTime;
-        this.session.corrections.push({
-          delay: correctionDelay,
-          position: this.session.currentWord.text.length,
-          word: this.session.currentWord.text
+        // Show elements again
+        document.querySelectorAll('.docs-titlebar-buttons, .docs-menubar').forEach(el => {
+          el.style.opacity = '1';
+          el.style.pointerEvents = 'auto';
         });
       }
+      
+      return focusModeActive;
     }
     
-    // SAME-CHARACTER REPEATS (stuck key patterns)
-    if (lastChar === this.session.lastChar && lastChar.match(/[a-zA-Z0-9]/)) {
-      this.session.sameCharRepeats++;
-    }
-    this.session.lastChar = lastChar;
-    
-    // Word boundary detection
-    if (lastChar === ' ' || lastChar === '\n' || event.inputType.includes('insertLineBreak')) {
-      this.finalizeWord();
-    } else {
-      this.session.currentWord.text = text.trim().split(' ').pop() || '';
-    }
-  }
-  
-  finalizeWord() {
-    if (this.session.currentWord.text.length > 0) {
-      const word = {
-        ...this.session.currentWord,
-        endTime: Date.now(),
-        duration: Date.now() - this.session.currentWord.startTime,
-        charactersPerSecond: this.session.currentWord.text.length / 
-                           ((Date.now() - this.session.currentWord.startTime) / 1000)
-      };
+    // ========== MESSAGE HANDLER ==========
+    chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
+      console.log("📩 Received message:", request.action);
       
-      this.session.words.push(word);
-      console.log(`📝 Word: "${word.text}" | CPS: ${word.charactersPerSecond.toFixed(2)} | Errors: ${word.backspaces}`);
-    }
-    
-    // Reset for next word
-    this.session.currentWord = { 
-      text: '', 
-      startTime: Date.now(), 
-      keystrokes: 0, 
-      backspaces: 0 
-    };
-  }
-  
-  // ===== 3. RHYTHM METRICS CALCULATION =====
-  calculateRhythmMetrics() {
-    const intervals = this.session.interKeyIntervals;
-    if (intervals.length < 2) return null;
-    
-    // Coefficient of Variation (speed variance)
-    const mean = intervals.reduce((a, b) => a + b, 0) / intervals.length;
-    const variance = intervals.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / intervals.length;
-    const cv = Math.sqrt(variance) / mean;
-    
-    // Simple autocorrelation (rhythm consistency)
-    let autocorr = 0;
-    for (let i = 1; i < Math.min(intervals.length, 10); i++) {
-      autocorr += Math.abs(intervals[i] - intervals[i-1]);
-    }
-    autocorr = autocorr / Math.min(intervals.length - 1, 9);
-    
-    return {
-      coefficientOfVariation: cv,
-      rhythmConsistency: 1 / (autocorr + 1), // Higher = more consistent
-      avgInterKeyInterval: mean,
-      pauseFrequency: this.session.pauses.length / (this.session.keystrokes / 100),
-      burstCount: this.session.burstCount,
-      burstFrequency: this.session.burstCount / ((Date.now() - this.session.startTime) / 60000)
-    };
-  }
-  
-  // ===== 4. GET SUMMARY REPORT =====
-  getSessionReport() {
-    const rhythm = this.calculateRhythmMetrics();
-    
-    return {
-      sessionDuration: Date.now() - this.session.startTime,
-      totalKeystrokes: this.session.keystrokes,
-      totalBackspaces: this.session.backspaces,
-      errorRate: this.session.backspaces / Math.max(this.session.keystrokes, 1),
-      wordsCompleted: this.session.words.length,
-      
-      timing: {
-        avgHoldTime: this.session.holdTimes.length > 0 ? 
-          this.session.holdTimes.reduce((a, b) => a + b.duration, 0) / this.session.holdTimes.length : 0,
-        avgInterKeyInterval: rhythm?.avgInterKeyInterval || 0,
-        totalPauses: this.session.pauses.length,
-        avgPauseDuration: this.session.pauses.length > 0 ?
-          this.session.pauses.reduce((a, b) => a + b.duration, 0) / this.session.pauses.length : 0
-      },
-      
-      errors: {
-        sameCharRepeats: this.session.sameCharRepeats,
-        correctionsCount: this.session.corrections.length,
-        avgCorrectionDelay: this.session.corrections.length > 0 ?
-          this.session.corrections.reduce((a, b) => a + b.delay, 0) / this.session.corrections.length : 0
-      },
-      
-      rhythm: rhythm || {
-        coefficientOfVariation: 0,
-        rhythmConsistency: 0,
-        avgInterKeyInterval: 0,
-        pauseFrequency: 0,
-        burstCount: 0,
-        burstFrequency: 0
-      },
-      
-      rawData: {
-        holdTimes: this.session.holdTimes.slice(-100),
-        interKeyIntervals: this.session.interKeyIntervals.slice(-200),
-        pauses: this.session.pauses,
-        words: this.session.words
+      switch(request.action) {
+        case 'ping':
+          sendResponse({ status: 'ready', time: Date.now() });
+          break;
+          
+        case 'getTypingData':
+          const data = {
+            totalKeystrokes: stats.keystrokes,
+            totalBackspaces: stats.backspaces,
+            errorRate: stats.backspaces / Math.max(stats.keystrokes, 1),
+            sessionDuration: Date.now() - stats.startTime,
+            wordsCompleted: Math.floor(stats.keystrokes / 5)
+          };
+          sendResponse(data);
+          break;
+          
+        case 'resetSession':
+          stats = { keystrokes: 0, backspaces: 0, startTime: Date.now() };
+          sendResponse({ status: 'reset' });
+          break;
+          
+        case 'toggleFocusMode':
+          const isActive = toggleFocusMode();
+          sendResponse({ active: isActive });
+          break;
+
+        case 'exportData':
+          console.log("Processing export request...");
+          const exportData = {
+            metadata: {
+              exportTime: new Date().toISOString(),
+              url: window.location.href,
+              platform: 'Google Docs',
+              extensionVersion: '1.0.0'
+            },
+            analytics: {
+              totalKeystrokes: stats.keystrokes,
+              totalBackspaces: stats.backspaces,
+              errorRate: stats.backspaces / Math.max(stats.keystrokes, 1),
+              sessionDuration: Date.now() - stats.startTime,
+              wordsEstimated: Math.floor(stats.keystrokes / 5),
+              typingSpeed: stats.keystrokes / ((Date.now() - stats.startTime) / 60000) // keystrokes per minute
+            },
+            privacyNote: "No actual text content stored - only typing patterns"
+          };
+          sendResponse({ 
+            status: 'exported', 
+            data: exportData 
+          });
+          break;
+          
+        default:
+          sendResponse({ error: 'unknown_action' });
       }
-    };
-  }
-  
-  // ===== 5. EXPORT DATA =====
-  exportSessionData() {
-    const report = this.getSessionReport();
+      
+      return true;
+    });
     
-    return {
-      metadata: {
-        exportTime: new Date().toISOString(),
-        sessionDuration: report.sessionDuration,
-        url: window.location.hostname
-      },
-      summary: {
-        totalKeystrokes: report.totalKeystrokes,
-        totalBackspaces: report.totalBackspaces,
-        wordsCompleted: report.wordsCompleted,
-        errorRate: report.errorRate
-      },
-      metrics: {
-        timing: report.timing,
-        errors: report.errors,
-        rhythm: report.rhythm
-      },
-      anonymizedPatterns: {
-        holdTimeDistribution: report.rawData.holdTimes,
-        interKeyIntervals: report.rawData.interKeyIntervals,
-        pausePatterns: report.rawData.pauses.map(p => ({
-          duration: p.duration,
-          position: p.position
-        })),
-        wordMetrics: report.rawData.words.map(w => ({
-          length: w.text?.length || 0,
-          duration: w.duration,
-          keystrokes: w.keystrokes,
-          backspaces: w.backspaces,
-          charactersPerSecond: w.charactersPerSecond
-        }))
-      }
-    };
+    // Add visual marker
+    addVisualMarker();
+    
+    // Store globally for debugging
+    window.EbbFlow = { stats, toggleFocusMode };
+    
+    console.log("EbbFlow fully initialized");
+    
+  } catch (error) {
+    console.error("EbbFlow initialization failed:", error);
   }
 }
 
-// Initialize analyzer
-const analyzer = new TypingAnalyzer();
-
-// Add visible marker to page
-const marker = document.createElement('div');
-marker.innerHTML = `
-  <div style="
-    position: fixed;
-    top: 10px;
-    right: 10px;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-    padding: 12px 20px;
-    border-radius: 8px;
-    z-index: 999999;
-    font-family: Arial, sans-serif;
-    font-weight: bold;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
-    border: 2px solid white;
-    font-size: 14px;
-  ">
-    🧠 EbbFlow Analytics Active
-  </div>
-`;
-document.body.appendChild(marker);
-
-// Listen for messages from popup
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  console.log("Message received:", request.action);
+function addVisualMarker() {
+  const marker = document.createElement('div');
+  marker.innerHTML = `
+    <div style="
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 8px 16px;
+      border-radius: 6px;
+      z-index: 999999;
+      font-family: Arial, sans-serif;
+      font-size: 12px;
+      font-weight: bold;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+      border: 2px solid white;
+    ">
+      🧠 EbbFlow Active
+    </div>
+  `;
   
-  if (request.action === 'getTypingData') {
-    sendResponse(analyzer.getSessionReport());
-    return true;
-  }
-  
-  if (request.action === 'resetSession') {
-    analyzer.resetSession();
-    sendResponse({ status: 'reset', timestamp: Date.now() });
-    return true;
-  }
-  
-  if (request.action === 'exportData') {
-    sendResponse({ 
-      status: 'exported',
-      data: analyzer.exportSessionData()
+  // Wait for body to exist
+  if (document.body) {
+    document.body.appendChild(marker);
+  } else {
+    // Wait for DOM to load
+    document.addEventListener('DOMContentLoaded', () => {
+      document.body.appendChild(marker);
     });
-    return true;
   }
   
-  sendResponse({ status: 'unknown_action' });
-  return true;
-});
-
-// Send a ready message when content script loads
-chrome.runtime.sendMessage({ 
-  action: 'contentScriptReady',
-  url: window.location.href 
-});
-
-console.log("✅ EbbFlow Typing Analytics initialized");
-console.log("📊 Tracking: Timing, Errors, Rhythm patterns");
+  console.log("Purple marker added");
+}

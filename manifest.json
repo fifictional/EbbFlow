@@ -2,27 +2,20 @@
   "manifest_version": 3,
   "name": "EbbFlow ADHD Assistant",
   "version": "1.0.0",
-  "description": "Adaptive writing support for ADHD/neurodivergent academics on Overleaf. ",
+  "description": "Adaptive writing support for ADHD/neurodivergent writers on Google Docs.",
   
-  "permissions": [
-    "storage",
-    "activeTab"
-  ],
+  "permissions": ["storage", "activeTab", "notifications"],
+  "host_permissions": ["https://docs.google.com/document/*"],
   
-  "host_permissions": [
-    "*://*.overleaf.com/*"
-  ],
-  
-  "background": {
-    "service_worker": "background.js"
-  },
+  "background": {"service_worker": "background.js"},
   
   "content_scripts": [{
-    "matches": ["*://*.overleaf.com/*"],
+    "matches": ["https://docs.google.com/document/*"],
     "js": ["content.js"],
+    "type": "module",  
     "run_at": "document_idle"
   }],
-  
+
   "action": {
     "default_popup": "popup.html",
     "default_title": "EbbFlow"
@@ -34,10 +27,9 @@
     "128": "icons/favicon_io/android-chrome-512x512.png"
   },
   
-  "web_accessible_resources": [
-    {
-      "resources": ["actions/*"],
-      "matches": ["*://*.overleaf.com/*"]
-    }
-  ]
+  "web_accessible_resources": [{
+    "resources": ["actions/*", "utils/*"],
+    "matches": ["https://docs.google.com/*"],
+    "use_dynamic_url": true
+  }]
 }

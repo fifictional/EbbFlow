@@ -1,19 +1,34 @@
 console.log('=== EbbFlow Popup Starting ===');
-
+// ------------------------
+function showMessage(message) {
+  console.log('showMessage (temp):', message);
+  const statsElement = document.getElementById('stats');
+  if (statsElement) {
+    statsElement.innerHTML = `
+      <div class="metric">
+        <h3>EbbFlow</h3>
+        <p>${message}</p>
+      </div>
+    `;
+  }
+}
+// ------------------------
 // Wait for DOM to be fully ready
 document.addEventListener('DOMContentLoaded', function() {
   console.log('DOM fully loaded');
   
-  // Get elements
+  // Get elements - ADD NEW FOCUS MODE BUTTON
   const statsElement = document.getElementById('stats');
   const resetBtn = document.getElementById('resetBtn');
   const exportBtn = document.getElementById('exportBtn');
+  const focusModeBtn = document.getElementById('focusModeBtn'); // NEW
   
   // DEBUG: Log what we found
   console.log('Elements found:', {
     stats: statsElement ? 'FOUND' : 'MISSING',
     resetBtn: resetBtn ? 'FOUND' : 'MISSING', 
-    exportBtn: exportBtn ? 'FOUND' : 'MISSING'
+    exportBtn: exportBtn ? 'FOUND' : 'MISSING',
+    focusModeBtn: focusModeBtn ? 'FOUND' : 'MISSING'  // NEW
   });
   
   // If stats element is missing, something is very wrong
@@ -23,42 +38,36 @@ document.addEventListener('DOMContentLoaded', function() {
     return;
   }
   
-  // Set up reset button
+  // Set up focus mode button (NEW)
+  if (focusModeBtn) {
+    focusModeBtn.addEventListener('click', function() {
+      console.log('Focus mode button clicked');
+      toggleFocusMode();
+    });
+    // Style the new button
+    focusModeBtn.style.background = '#4A90E2';
+    focusModeBtn.style.color = 'white';
+    focusModeBtn.style.marginBottom = '10px';
+  }
+  
+  // Set up reset button (existing)
   if (resetBtn) {
     resetBtn.addEventListener('click', function() {
       console.log('Reset button clicked');
       handleReset();
     });
-  } else {
-    console.error('WARNING: Reset button not found');
-    // Create a fallback button
-    const fallbackReset = document.createElement('button');
-    fallbackReset.textContent = '🔄 Reset (Fallback)';
-    fallbackReset.style.background = '#EA4335';
-    fallbackReset.style.color = 'white';
-    fallbackReset.addEventListener('click', handleReset);
-    document.body.appendChild(fallbackReset);
   }
   
-  // Set up export button
+  // Set up export button (existing)
   if (exportBtn) {
     exportBtn.addEventListener('click', function() {
       console.log('Export button clicked');
       handleExport();
     });
-  } else {
-    console.error('WARNING: Export button not found');
-    // Create a fallback button
-    const fallbackExport = document.createElement('button');
-    fallbackExport.textContent = '📤 Export (Fallback)';
-    fallbackExport.style.background = '#34A853';
-    fallbackExport.style.color = 'white';
-    fallbackExport.addEventListener('click', handleExport);
-    document.body.appendChild(fallbackExport);
   }
   
   // Initial display
-  showMessage('Loading analytics...');
+  showMessage('Loading EbbFlow...');
   
   // Start updating stats
   updateStats();
@@ -66,11 +75,10 @@ document.addEventListener('DOMContentLoaded', function() {
   // Update every 3 seconds
   setInterval(updateStats, 3000);
   
-  // ========== FUNCTION DEFINITIONS ==========
-  
-  function handleReset() {
-    console.log('Resetting session...');
-    showMessage('Resetting session...');
+  // ========== NEW FUNCTION: TOGGLE FOCUS MODE ==========
+  function toggleFocusMode() {
+    console.log('Toggling focus mode...');
+    showMessage('Toggling focus mode...');
     
     chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
       if (!tabs || tabs.length === 0) {
@@ -79,69 +87,26 @@ document.addEventListener('DOMContentLoaded', function() {
       }
       
       const tab = tabs[0];
-      console.log('Sending reset to tab:', tab.url);
+      console.log('Sending focus mode toggle to:', tab.url);
       
-      chrome.tabs.sendMessage(tab.id, {action: 'resetSession'}, function(response) {
-        // SAFE error check
+      chrome.tabs.sendMessage(tab.id, {action: 'toggleFocusMode'}, function(response) {
         const error = chrome.runtime.lastError;
         if (error) {
-          console.error('Reset error:', error.message);
-          showMessage('Reset failed: ' + error.message);
-        } else {
-          console.log('Reset successful');
-          showMessage('Session reset!');
-          // Refresh stats after 1 second
-          setTimeout(updateStats, 1000);
+          console.error('Focus mode error:', error.message);
+          showMessage('Focus mode failed: ' + error.message);
+        } else if (response) {
+          console.log('Focus mode toggled:', response.active);
+          if (focusModeBtn) {
+            focusModeBtn.textContent = response.active ? 
+              '🧠 Focus Mode: ON' : '🧠 Focus Mode: OFF';
+          }
+          showMessage(response.active ? 'Focus mode enabled!' : 'Focus mode disabled');
         }
       });
     });
   }
   
-  function handleExport() {
-    console.log('Exporting data...');
-    
-    chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
-      if (!tabs || tabs.length === 0) {
-        alert('No active tab found');
-        return;
-      }
-      
-      const tab = tabs[0];
-      console.log('Requesting export from:', tab.url);
-      
-      chrome.tabs.sendMessage(tab.id, {action: 'exportData'}, function(response) {
-        // SAFE error check
-        const error = chrome.runtime.lastError;
-        if (error) {
-          console.error('Export error:', error.message);
-          alert('Export failed: ' + error.message);
-          return;
-        }
-        
-        if (response && response.data) {
-          console.log('Export data received');
-          
-          // Create downloadable file
-          const dataStr = JSON.stringify(response.data, null, 2);
-          const dataBlob = new Blob([dataStr], {type: 'application/json'});
-          const dataUrl = URL.createObjectURL(dataBlob);
-          
-          const downloadLink = document.createElement('a');
-          downloadLink.href = dataUrl;
-          downloadLink.download = `ebbflow-data-${Date.now()}.json`;
-          document.body.appendChild(downloadLink);
-          downloadLink.click();
-          document.body.removeChild(downloadLink);
-          URL.revokeObjectURL(dataUrl);
-          
-          alert('✅ Data exported successfully!');
-        } else {
-          alert('No data available to export. Start typing first!');
-        }
-      });
-    });
-  }
-  
+  // ========== UPDATED updateStats() FOR GOOGLE DOCS ==========
   function updateStats() {
     console.log('Updating stats...');
     
@@ -156,79 +121,157 @@ document.addEventListener('DOMContentLoaded', function() {
       
       // Skip browser pages
       if (url.startsWith('chrome://') || url.startsWith('about:') || url.startsWith('arc://')) {
-        showMessage('Open on Overleaf or Google Docs');
+        showMessage('Please open Google Docs');
         return;
       }
       
-      console.log('Requesting data from:', url);
+      console.log('Checking page:', url);
       
-      chrome.tabs.sendMessage(tab.id, {action: 'getTypingData'}, function(response) {
-        // SAFE error check
-        const error = chrome.runtime.lastError;
-        if (error) {
-          console.log('Content script not ready:', error.message);
-          showMessage('Start typing on a text page');
+      // CHANGE: Check for Google Docs instead of Overleaf
+      if (!url.includes('docs.google.com/document/')) {
+        showMessage(`
+          <div style="padding: 15px; text-align: center;">
+            <h3>📝 Open Google Docs</h3>
+            <p>Please open a <strong>Google Document</strong> to use EbbFlow</p>
+            <p><small>Current page: ${url.substring(0, 50)}...</small></p>
+          </div>
+        `);
+        return;
+      }
+      
+      console.log('Requesting data from Google Docs');
+      
+      // First, check if content script is ready with a ping
+      chrome.tabs.sendMessage(tab.id, {action: 'ping'}, function(pingResponse) {
+        const pingError = chrome.runtime.lastError;
+        
+        if (pingError) {
+          console.log('Content script not ready:', pingError.message);
+          
+          // Google Docs-specific instructions
+          showMessage(`
+            <div style="padding: 15px; text-align: center;">
+              <h3>🔧 Setup Required</h3>
+              <p>EbbFlow needs a quick setup on Google Docs:</p>
+              <ol style="text-align: left; margin: 15px;">
+                <li>Make sure you're in a Google <strong>document</strong></li>
+                <li><strong>Refresh this page</strong> (F5 or Ctrl+R)</li>
+                <li>Click the EbbFlow icon again</li>
+              </ol>
+              <button onclick="window.location.reload()" style="margin-top: 10px; padding: 8px 16px; background: #4285f4; color: white; border: none; border-radius: 4px;">
+                Refresh Google Docs
+              </button>
+            </div>
+          `);
           return;
         }
         
-        if (response) {
-          console.log('Data received:', response.totalKeystrokes, 'keystrokes');
-          displayStats(response);
+        // Content script is ready, get data
+        console.log('Content script ready, requesting data');
+        chrome.tabs.sendMessage(tab.id, {action: 'getTypingData'}, function(response) {
+          const error = chrome.runtime.lastError;
+          
+          if (error) {
+            console.log('Data request failed:', error.message);
+            showMessage('Start typing in Google Docs to see analytics!');
+            return;
+          }
+          
+          if (response) {
+            console.log('Data received:', response.totalKeystrokes, 'keystrokes');
+            displayStats(response);
+          } else {
+            showMessage('Start typing to see analytics!');
+          }
+        });
+      });
+    });
+  }
+  
+  // ========== UPDATED handleReset() ==========
+  function handleReset() {
+    console.log('Resetting session...');
+    showMessage('Resetting session...');
+    
+    chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
+      if (!tabs || tabs.length === 0) {
+        showMessage('No active tab found');
+        return;
+      }
+      
+      const tab = tabs[0];
+      
+      // First check if we're on Google Docs
+      if (!tab.url.includes('docs.google.com/document/')) {
+        showMessage('Please open Google Docs to reset session');
+        return;
+      }
+      
+      chrome.tabs.sendMessage(tab.id, {action: 'resetSession'}, function(response) {
+        const error = chrome.runtime.lastError;
+        if (error) {
+          console.error('Reset error:', error.message);
+          showMessage('Reset failed: ' + error.message);
         } else {
-          showMessage('No data yet - start typing!');
+          console.log('Reset successful');
+          showMessage('Session reset!');
+          setTimeout(updateStats, 1000);
         }
       });
     });
   }
   
-  function displayStats(data) {
-    console.log('Displaying stats:', data);
+  // ========== UPDATED handleExport() ==========
+  function handleExport() {
+    console.log('Exporting data...');
     
-    // Ensure data exists
-    if (!data) {
-      showMessage('No data available');
-      return;
-    }
-    
-    const safeData = {
-      sessionDuration: data.sessionDuration || 0,
-      totalKeystrokes: data.totalKeystrokes || 0,
-      totalBackspaces: data.totalBackspaces || 0,
-      wordsCompleted: data.wordsCompleted || 0,
-      errorRate: data.errorRate || 0
-    };
-    
-    const html = `
-      <div class="metric">
-        <h3>📈 Session Overview</h3>
-        <p><strong>Keystrokes:</strong> <span class="highlight">${safeData.totalKeystrokes}</span></p>
-        <p><strong>Backspaces:</strong> <span class="highlight">${safeData.totalBackspaces}</span></p>
-        <p><strong>Words:</strong> ${safeData.wordsCompleted}</p>
-        <p><strong>Duration:</strong> ${formatTime(safeData.sessionDuration)}</p>
-        <p><strong>Error Rate:</strong> ${(safeData.errorRate * 100).toFixed(1)}%</p>
-      </div>
-    `;
-    
-    statsElement.innerHTML = html;
+    chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
+      if (!tabs || tabs.length === 0) {
+        alert('No active tab found');
+        return;
+      }
+      
+      const tab = tabs[0];
+      
+      // Check Google Docs
+      if (!tab.url.includes('docs.google.com/document/')) {
+        alert('Please open Google Docs to export data');
+        return;
+      }
+      
+      chrome.tabs.sendMessage(tab.id, {action: 'exportData'}, function(response) {
+        const error = chrome.runtime.lastError;
+        if (error) {
+          console.error('Export error:', error.message);
+          alert('Export failed: ' + error.message);
+          return;
+        }
+        
+        if (response && response.data) {
+          console.log('Export data received');
+          
+          const dataStr = JSON.stringify(response.data, null, 2);
+          const dataBlob = new Blob([dataStr], {type: 'application/json'});
+          const dataUrl = URL.createObjectURL(dataBlob);
+          
+          const downloadLink = document.createElement('a');
+          downloadLink.href = dataUrl;
+          downloadLink.download = `ebbflow-gdocs-${Date.now()}.json`;
+          document.body.appendChild(downloadLink);
+          downloadLink.click();
+          document.body.removeChild(downloadLink);
+          URL.revokeObjectURL(dataUrl);
+          
+          alert('Google Docs data exported!');
+        } else {
+          alert('No data available. Start typing in Google Docs first!');
+        }
+      });
+    });
   }
   
-  function showMessage(message) {
-    console.log('Showing message:', message);
-    if (!statsElement) return;
-    
-    statsElement.innerHTML = `
-      <div class="metric">
-        <h3>🧠 EbbFlow Analytics</h3>
-        <p>${message}</p>
-      </div>
-    `;
-  }
-  
-  function formatTime(ms) {
-    const minutes = Math.floor(ms / 60000);
-    const seconds = Math.floor((ms % 60000) / 1000);
-    return `${minutes}m ${seconds}s`;
-  }
+  // Keep displayStats(), showMessage(), formatTime() functions exactly as they are
+  // They don't need to change
   
   console.log('=== Popup initialization complete ===');
 });
