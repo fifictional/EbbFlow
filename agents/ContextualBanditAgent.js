@@ -167,13 +167,13 @@ export class ContextualBanditAgent {
     this.lastContext = null;
     this.lastAction = null;
   }
-  
+    
   calculateReward(prevMetrics, currentMetrics, actionTaken) {
     let reward = 0;
     
     // no typing
     const isNoTyping = prevMetrics.rhythmConsistency < 0.1 && 
-                       currentMetrics.rhythmConsistency < 0.1;
+                      currentMetrics.rhythmConsistency < 0.1;
     
     if (isNoTyping) {
       if (actionTaken === 'suggest_break') {
@@ -184,6 +184,12 @@ export class ContextualBanditAgent {
         reward -= 0.3;
       }
       return reward;
+    }
+    
+    if (prevMetrics.rhythmConsistency < 0.1 && 
+        currentMetrics.rhythmConsistency > 0.3 && 
+        actionTaken === 'encourage') {
+      reward += 2.0;  
     }
     
     // rhythm quality rewards

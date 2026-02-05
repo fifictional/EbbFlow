@@ -17,40 +17,34 @@ function showMessage(message) {
 document.addEventListener('DOMContentLoaded', function() {
   console.log('DOM fully loaded');
   
-  // Get elements - ADD NEW FOCUS MODE BUTTON
   const statsElement = document.getElementById('stats');
   const resetBtn = document.getElementById('resetBtn');
   const exportBtn = document.getElementById('exportBtn');
-  const focusModeBtn = document.getElementById('focusModeBtn'); // NEW
+  const focusModeBtn = document.getElementById('focusModeBtn'); 
   
-  // DEBUG: Log what we found
   console.log('Elements found:', {
     stats: statsElement ? 'FOUND' : 'MISSING',
     resetBtn: resetBtn ? 'FOUND' : 'MISSING', 
     exportBtn: exportBtn ? 'FOUND' : 'MISSING',
-    focusModeBtn: focusModeBtn ? 'FOUND' : 'MISSING'  // NEW
+    focusModeBtn: focusModeBtn ? 'FOUND' : 'MISSING'  
   });
   
-  // If stats element is missing, something is very wrong
   if (!statsElement) {
     console.error('CRITICAL ERROR: No #stats element found!');
     document.body.innerHTML = '<p style="color:red;padding:20px;">ERROR: Missing #stats element</p>';
     return;
   }
   
-  // Set up focus mode button (NEW)
   if (focusModeBtn) {
     focusModeBtn.addEventListener('click', function() {
       console.log('Focus mode button clicked');
       toggleFocusMode();
     });
-    // Style the new button
     focusModeBtn.style.background = '#4A90E2';
     focusModeBtn.style.color = 'white';
     focusModeBtn.style.marginBottom = '10px';
   }
   
-  // Set up reset button (existing)
   if (resetBtn) {
     resetBtn.addEventListener('click', function() {
       console.log('Reset button clicked');
@@ -58,7 +52,6 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
   
-  // Set up export button (existing)
   if (exportBtn) {
     exportBtn.addEventListener('click', function() {
       console.log('Export button clicked');
@@ -66,13 +59,9 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
   
-  // Initial display
+
   showMessage('Loading EbbFlow...');
-  
-  // Start updating stats
   updateStats();
-  
-  // Update every 3 seconds
   setInterval(updateStats, 3000);
   
   // ========== NEW FUNCTION: TOGGLE FOCUS MODE ==========
@@ -106,7 +95,7 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
   
-  // ========== UPDATED updateStats() FOR GOOGLE DOCS ==========
+  // ========== update stats ==========
   function updateStats() {
     console.log('Updating stats...');
     
@@ -119,7 +108,6 @@ document.addEventListener('DOMContentLoaded', function() {
       const tab = tabs[0];
       const url = tab.url || '';
       
-      // Skip browser pages
       if (url.startsWith('chrome://') || url.startsWith('about:') || url.startsWith('arc://')) {
         showMessage('Please open Google Docs');
         return;
@@ -127,7 +115,6 @@ document.addEventListener('DOMContentLoaded', function() {
       
       console.log('Checking page:', url);
       
-      // CHANGE: Check for Google Docs instead of Overleaf
       if (!url.includes('docs.google.com/document/')) {
         showMessage(`
           <div style="padding: 15px; text-align: center;">
@@ -141,14 +128,12 @@ document.addEventListener('DOMContentLoaded', function() {
       
       console.log('Requesting data from Google Docs');
       
-      // First, check if content script is ready with a ping
       chrome.tabs.sendMessage(tab.id, {action: 'ping'}, function(pingResponse) {
         const pingError = chrome.runtime.lastError;
         
         if (pingError) {
           console.log('Content script not ready:', pingError.message);
           
-          // Google Docs-specific instructions
           showMessage(`
             <div style="padding: 15px; text-align: center;">
               <h3>🔧 Setup Required</h3>
@@ -188,7 +173,6 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
   
-  // ========== UPDATED handleReset() ==========
   function handleReset() {
     console.log('Resetting session...');
     showMessage('Resetting session...');
@@ -201,7 +185,6 @@ document.addEventListener('DOMContentLoaded', function() {
       
       const tab = tabs[0];
       
-      // First check if we're on Google Docs
       if (!tab.url.includes('docs.google.com/document/')) {
         showMessage('Please open Google Docs to reset session');
         return;
@@ -221,7 +204,6 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
   
-  // ========== UPDATED handleExport() ==========
   function handleExport() {
     console.log('Exporting data...');
     
@@ -269,9 +251,6 @@ document.addEventListener('DOMContentLoaded', function() {
       });
     });
   }
-  
-  // Keep displayStats(), showMessage(), formatTime() functions exactly as they are
-  // They don't need to change
   
   console.log('=== Popup initialization complete ===');
 });

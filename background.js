@@ -1,12 +1,10 @@
 /// background.js - Updated for Google Docs
 console.log("🧠 EbbFlow: Background script loaded");
 
-// Optional: Store analytics data if you want cross-session persistence
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   console.log("Background received:", message.action || message.type);
   
   if (message.type === 'KEYLOG_UPDATE') {
-    // Store in chrome.storage (optional)
     chrome.storage.local.get(['keystrokeCount', 'backspaceCount'], (result) => {
       const newKeystrokes = (result.keystrokeCount || 0) + (message.keystrokes || 0);
       const newBackspaces = (result.backspaceCount || 0) + (message.backspaces || 0);
@@ -28,7 +26,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   return true;
 });
 
-// Optional: Show welcome notification on install
 chrome.runtime.onInstalled.addListener(() => {
   console.log("EbbFlow installed for Google Docs support");
   

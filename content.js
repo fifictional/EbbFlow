@@ -1,19 +1,21 @@
-console.log("EBBFLOW loading on", window.location.href);
+const DEBUG = false;
+
+if (DEBUG) console.log("EBBFLOW loading on", window.location.href);
 
 if (window.location.hostname.includes('docs.google.com') && 
     window.location.pathname.includes('/document/')) {
-  console.log("Google Docs detected, initialising...");
+  if (DEBUG) console.log("Google Docs detected, initialising...");
   initEbbFlow().catch(err => {
-    console.error("ERROR:", err);
+    if (DEBUG) console.error("ERROR:", err);
   });
 }
 
 async function initEbbFlow() {
   try {
     // ========== DYNAMIC IMPORTS ==========
-    const analyserUrl = chrome.runtime.getURL('actions/TypingAnalyser.js');
+    const analyserUrl = chrome.runtime.getURL('utils/TypingAnalyser.js');
     const rlAgentUrl = chrome.runtime.getURL('agents/ContextualBanditAgent.js');
-    const uiManagerUrl = chrome.runtime.getURL('actions/UIManager.js');
+    const uiManagerUrl = chrome.runtime.getURL('utils/UIManager.js');
     const focusModeUrl = chrome.runtime.getURL('actions/GoogleDocsFocusMode.js');
     
     const [analyserModule, rlAgentModule, uiManagerModule, focusModeModule] = await Promise.all([
@@ -28,7 +30,7 @@ async function initEbbFlow() {
     const { UIManager } = uiManagerModule;
     const { GoogleDocsFocusMode } = focusModeModule;
     
-    // ========== INITIALIZE COMPONENTS ==========
+    // ========== INITIALISE COMPONENTS ==========
     const analyser = new TypingAnalyser();
     const uiManager = new UIManager();
     const focusMode = new GoogleDocsFocusMode();
@@ -49,7 +51,10 @@ async function initEbbFlow() {
       
       let prevMetrics = null;
       let prevAction = null;  
-    
+
+      // make sure global timers object exists
+      window.EbbFlow = window.EbbFlow || {};
+      window.EbbFlow.timers = window.EbbFlow.timers || {};
       
       const rlInterval = setInterval(async () => {
         const report = analyser.getSessionReport();
@@ -64,11 +69,11 @@ async function initEbbFlow() {
         if (prevMetrics && prevAction) {
           const reward = rlAgent.calculateReward(prevMetrics, metrics, prevAction);
           rlAgent.learn(reward);
-          console.log(`Reward: ${reward.toFixed(2)} for ${prevAction}`);
+          if (DEBUG) console.log(`Reward: ${reward.toFixed(2)} for ${prevAction}`);
         }
         
         const action = rlAgent.chooseAction(metrics);
-        console.log(`Bandit chose: ${action}`);
+        if (DEBUG) console.log(`Bandit chose: ${action}`);
         
         uiManager.executeAction(action);
         
@@ -76,28 +81,33 @@ async function initEbbFlow() {
         prevAction = action;  
         
       }, 10000);
-    
-    setInterval(() => {
-      const saved = rlAgent.save();
-      chrome.storage.local.set({ banditModels: saved });
-      console.log("Bandit data auto-saved");
-    }, 600000);
-    
-    return { rlAgent, rlInterval };
-  }
+
+      // store interval so it can be cleared later
+      window.EbbFlow.timers.rlInterval = rlInterval;
+
+      const autosaveId = setInterval(() => {
+        const saved = rlAgent.save();
+        chrome.storage.local.set({ banditModels: saved });
+        if (DEBUG) console.log("Bandit data auto-saved");
+      }, 600000);
+
+      window.EbbFlow.timers.autosave = autosaveId;
       
-    // ========== START EVERYTHING ==========
+      return { rlAgent, rlInterval, autosaveId };
+    }
+        
+    // ========== START ==========
     const { rlAgent, rlInterval } = await setupRL();
     
-    // Store in global object
-    window.EbbFlow = {
+    // Store in global object (merge with existing)
+    window.EbbFlow = Object.assign(window.EbbFlow || {}, {
       analyser,
       rlAgent,
       uiManager,
       focusMode,
       rlInterval,
       isRLRunning: true
-    };
+    });
     
     // ========== MESSAGE HANDLER ==========
     chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
@@ -113,7 +123,15 @@ async function initEbbFlow() {
           stats: rlAgent.getStats()
         }),
         'stopRL': () => {
-          clearInterval(rlInterval);
+          // clear stored timers
+          if (window.EbbFlow?.timers?.rlInterval) {
+            clearInterval(window.EbbFlow.timers.rlInterval);
+            window.EbbFlow.timers.rlInterval = null;
+          }
+          if (window.EbbFlow?.timers?.autosave) {
+            clearInterval(window.EbbFlow.timers.autosave);
+            window.EbbFlow.timers.autosave = null;
+          }
           window.EbbFlow.isRLRunning = false;
           return { status: 'rl_stopped' };
         }
@@ -134,17 +152,20 @@ async function initEbbFlow() {
         const saved = window.EbbFlow.rlAgent.save();
         chrome.storage.local.set({ banditModels: saved });
       }
-      if (window.EbbFlow?.rlInterval) {
-        clearInterval(window.EbbFlow.rlInterval);
+      if (window.EbbFlow?.timers?.rlInterval) {
+        clearInterval(window.EbbFlow.timers.rlInterval);
+      }
+      if (window.EbbFlow?.timers?.autosave) {
+        clearInterval(window.EbbFlow.timers.autosave);
       }
     });
 
     // Add visual marker
     uiManager.addVisualMarker();
 
-    console.log("EbbFlow initialized successfully");
+    if (DEBUG) console.log("EbbFlow initialized successfully");
 
       } catch (error) {
-        console.error("EbbFlow initialization failed:", error);
+        if (DEBUG) console.error("EbbFlow initialization failed:", error);
       }
     }
