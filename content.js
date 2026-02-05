@@ -1,169 +1,150 @@
-// content.js 
+console.log("EBBFLOW loading on", window.location.href);
 
-console.log("🎯 EBBFLOW loading on", window.location.href);
-
-
-// Only run on Google Docs
 if (window.location.hostname.includes('docs.google.com') && 
     window.location.pathname.includes('/document/')) {
-  
-  initEbbFlow();
-} else {
-  console.log("Not a Google Docs document page");
+  console.log("Google Docs detected, initialising...");
+  initEbbFlow().catch(err => {
+    console.error("ERROR:", err);
+  });
 }
 
-function initEbbFlow() {
+async function initEbbFlow() {
   try {
-    console.log("Initializing EbbFlow for Google Docs");
+    // ========== DYNAMIC IMPORTS ==========
+    const analyserUrl = chrome.runtime.getURL('actions/TypingAnalyser.js');
+    const rlAgentUrl = chrome.runtime.getURL('actions/ContextualBanditAgent.js');
+    const uiManagerUrl = chrome.runtime.getURL('actions/UIManager.js');
+    const focusModeUrl = chrome.runtime.getURL('actions/GoogleDocsFocusMode.js');
     
-    // ========== SIMPLE TYPING ANALYSER ==========
-    let stats = {
-      keystrokes: 0,
-      backspaces: 0,
-      startTime: Date.now()
-    };
+    const [analyserModule, rlAgentModule, uiManagerModule, focusModeModule] = await Promise.all([
+      import(analyserUrl),
+      import(rlAgentUrl),
+      import(uiManagerUrl),
+      import(focusModeUrl)
+    ]);
     
-    // Listen for typing
-    document.addEventListener('keydown', function(e) {
-      const isInEditor = e.target.isContentEditable || 
-                         e.target.closest('[contenteditable="true"]');
-      if (!isInEditor) return;
+    const { TypingAnalyser } = analyserModule;
+    const { ContextualBanditAgent } = rlAgentModule;
+    const { UIManager } = uiManagerModule;
+    const { GoogleDocsFocusMode } = focusModeModule;
+    
+    // ========== INITIALIZE COMPONENTS ==========
+    const analyser = new TypingAnalyser();
+    const uiManager = new UIManager();
+    const focusMode = new GoogleDocsFocusMode();
+    
+    
+    // Start analyser
+    setTimeout(() => {
+      analyser.setupGoogleDocsListeners();
+    }, 2000);
+    
+    async function setupRL() {
+      const rlAgent = new ContextualBanditAgent();
       
-      stats.keystrokes++;
-      if (e.key === 'Backspace') stats.backspaces++;
-      console.log(`Keystroke ${stats.keystrokes}, Backspaces: ${stats.backspaces}`);
-    });
-    
-    // ========== SIMPLE FOCUS MODE ==========
-    let focusModeActive = false;
-    
-    function toggleFocusMode() {
-      focusModeActive = !focusModeActive;
-      console.log("Focus mode:", focusModeActive ? "ON" : "OFF");
-      
-      if (focusModeActive) {
-        // Hide distracting elements
-        document.querySelectorAll('.docs-titlebar-buttons, .docs-menubar').forEach(el => {
-          el.style.opacity = '0.3';
-          el.style.pointerEvents = 'none';
-        });
-      } else {
-        // Show elements again
-        document.querySelectorAll('.docs-titlebar-buttons, .docs-menubar').forEach(el => {
-          el.style.opacity = '1';
-          el.style.pointerEvents = 'auto';
-        });
+      const saved = await chrome.storage.local.get(['banditModels']);
+      if (saved.banditModels) {
+        rlAgent.load(saved.banditModels);
       }
       
-      return focusModeActive;
-    }
+      let prevMetrics = null;
+      let prevAction = null;  
+    
+      
+      const rlInterval = setInterval(async () => {
+        const report = analyser.getSessionReport();
+        
+        const metrics = {
+          rhythmConsistency: report.rhythm.rhythmConsistency,
+          pauseFrequency: report.rhythm.pauseFrequency,
+          correctionsCount: report.errors.correctionsCount,
+          avgInterKeyInterval: report.rhythm.avgInterKeyInterval
+        };
+        
+        if (prevMetrics && prevAction) {
+          const reward = rlAgent.calculateReward(prevMetrics, metrics, prevAction);
+          rlAgent.learn(reward);
+          console.log(`Reward: ${reward.toFixed(2)} for ${prevAction}`);
+        }
+        
+        const action = rlAgent.chooseAction(metrics);
+        console.log(`Bandit chose: ${action}`);
+        
+        uiManager.executeAction(action);
+        
+        prevMetrics = { ...metrics };
+        prevAction = action;  
+        
+      }, 10000);
+    
+    setInterval(() => {
+      const saved = rlAgent.save();
+      chrome.storage.local.set({ banditModels: saved });
+      console.log("Bandit data auto-saved");
+    }, 600000);
+    
+    return { rlAgent, rlInterval };
+  }
+      
+    // ========== START EVERYTHING ==========
+    const { rlAgent, rlInterval } = await setupRL();
+    
+    // Store in global object
+    window.EbbFlow = {
+      analyser,
+      rlAgent,
+      uiManager,
+      focusMode,
+      rlInterval,
+      isRLRunning: true
+    };
     
     // ========== MESSAGE HANDLER ==========
-    chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
-      console.log("📩 Received message:", request.action);
+    chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+      const actions = {
+        'ping': () => ({ status: 'ready', time: Date.now() }),
+        'getTypingData': () => analyser.getSessionReport(),
+        'resetSession': () => analyser.resetSession(),
+        'toggleFocusMode': () => focusMode.toggle(),
+        'getRLState': () => ({
+          contextsLearned: Object.keys(rlAgent.models).length,
+          baseline: rlAgent.baseline,
+          decisions: rlAgent.history.length,
+          stats: rlAgent.getStats()
+        }),
+        'stopRL': () => {
+          clearInterval(rlInterval);
+          window.EbbFlow.isRLRunning = false;
+          return { status: 'rl_stopped' };
+        }
+      };
       
-      switch(request.action) {
-        case 'ping':
-          sendResponse({ status: 'ready', time: Date.now() });
-          break;
-          
-        case 'getTypingData':
-          const data = {
-            totalKeystrokes: stats.keystrokes,
-            totalBackspaces: stats.backspaces,
-            errorRate: stats.backspaces / Math.max(stats.keystrokes, 1),
-            sessionDuration: Date.now() - stats.startTime,
-            wordsCompleted: Math.floor(stats.keystrokes / 5)
-          };
-          sendResponse(data);
-          break;
-          
-        case 'resetSession':
-          stats = { keystrokes: 0, backspaces: 0, startTime: Date.now() };
-          sendResponse({ status: 'reset' });
-          break;
-          
-        case 'toggleFocusMode':
-          const isActive = toggleFocusMode();
-          sendResponse({ active: isActive });
-          break;
-
-        case 'exportData':
-          console.log("Processing export request...");
-          const exportData = {
-            metadata: {
-              exportTime: new Date().toISOString(),
-              url: window.location.href,
-              platform: 'Google Docs',
-              extensionVersion: '1.0.0'
-            },
-            analytics: {
-              totalKeystrokes: stats.keystrokes,
-              totalBackspaces: stats.backspaces,
-              errorRate: stats.backspaces / Math.max(stats.keystrokes, 1),
-              sessionDuration: Date.now() - stats.startTime,
-              wordsEstimated: Math.floor(stats.keystrokes / 5),
-              typingSpeed: stats.keystrokes / ((Date.now() - stats.startTime) / 60000) // keystrokes per minute
-            },
-            privacyNote: "No actual text content stored - only typing patterns"
-          };
-          sendResponse({ 
-            status: 'exported', 
-            data: exportData 
-          });
-          break;
-          
-        default:
-          sendResponse({ error: 'unknown_action' });
+      if (actions[request.action]) {
+        sendResponse(actions[request.action]());
+      } else {
+        sendResponse({ error: 'unknown_action' });
       }
       
       return true;
     });
     
-    // Add visual marker
-    addVisualMarker();
-    
-    // Store globally for debugging
-    window.EbbFlow = { stats, toggleFocusMode };
-    
-    console.log("EbbFlow fully initialized");
-    
-  } catch (error) {
-    console.error("EbbFlow initialization failed:", error);
-  }
-}
-
-function addVisualMarker() {
-  const marker = document.createElement('div');
-  marker.innerHTML = `
-    <div style="
-      position: fixed;
-      top: 10px;
-      right: 10px;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      color: white;
-      padding: 8px 16px;
-      border-radius: 6px;
-      z-index: 999999;
-      font-family: Arial, sans-serif;
-      font-size: 12px;
-      font-weight: bold;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-      border: 2px solid white;
-    ">
-      🧠 EbbFlow Active
-    </div>
-  `;
-  
-  // Wait for body to exist
-  if (document.body) {
-    document.body.appendChild(marker);
-  } else {
-    // Wait for DOM to load
-    document.addEventListener('DOMContentLoaded', () => {
-      document.body.appendChild(marker);
+    // ========== CLEANUP ==========
+    window.addEventListener('beforeunload', () => {
+      if (window.EbbFlow?.rlAgent) {
+        const saved = window.EbbFlow.rlAgent.save();
+        chrome.storage.local.set({ banditModels: saved });
+      }
+      if (window.EbbFlow?.rlInterval) {
+        clearInterval(window.EbbFlow.rlInterval);
+      }
     });
-  }
-  
-  console.log("Purple marker added");
-}
+
+    // Add visual marker
+    uiManager.addVisualMarker();
+
+    console.log("EbbFlow initialized successfully");
+
+      } catch (error) {
+        console.error("EbbFlow initialization failed:", error);
+      }
+    }

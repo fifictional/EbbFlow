@@ -1,4 +1,4 @@
-// actions/TypingAnalyser.js - MODIFIED FOR GOOGLE DOCS
+// actions/TypingAnalyser.js 
 export class TypingAnalyser {
   constructor() {
     this.resetSession();
@@ -32,17 +32,50 @@ export class TypingAnalyser {
   }
   
   setupGoogleDocsListeners() {
-    console.log("Setting up Google Docs listeners...");
+    console.log("📡 Setting up Google Docs listeners...");
     
-    // Method 1: Try to find Google Docs editor
+    // Method 1: Find the editor
     this.findGoogleDocsEditor();
     
-    // Method 2: Global listener with better detection
-    document.addEventListener('keydown', (e) => this.onKeyDown(e), true); // CAPTURE phase
+    // Method 2: Find and listen to the hidden iframe
+    const findAndAttachToIframe = () => {
+      const iframe = document.querySelector('.docs-texteventtarget-iframe');
+      
+      if (iframe && iframe.contentDocument) {
+        console.log("✅ Found Google Docs input iframe!");
+        const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+        
+        // Listen to iframe's document
+        iframeDoc.addEventListener('keydown', (e) => {
+          console.log("🌍 IFRAME KEYDOWN:", e.key);
+          this.onKeyDown(e);
+        }, true);
+        
+        iframeDoc.addEventListener('keyup', (e) => this.onKeyUp(e), true);
+        iframeDoc.addEventListener('input', (e) => this.onInput(e), true);
+        
+        console.log("✅ Listeners attached to iframe document");
+      } else {
+        console.log("⚠️ Iframe not ready, retrying...");
+        setTimeout(findAndAttachToIframe, 500);
+      }
+    };
+    
+    // Also listen to main document (for fallback)
+    document.addEventListener('keydown', (e) => {
+      console.log("🌍 MAIN DOC KEYDOWN:", e.key);
+      this.onKeyDown(e);
+    }, true);
+    
     document.addEventListener('keyup', (e) => this.onKeyUp(e), true);
     document.addEventListener('input', (e) => this.onInput(e), true);
     
-    // Method 3: MutationObserver for dynamic content
+    console.log("✅ Main document listeners attached");
+    
+    // Try to attach to iframe
+    setTimeout(findAndAttachToIframe, 1000);
+    
+    // Method 3: MutationObserver
     this.setupMutationObserver();
   }
   
@@ -56,18 +89,32 @@ export class TypingAnalyser {
       '.kix-cursor-caret'
     ];
     
+    console.log("🔍 Searching for Google Docs editor...");
+    
     for (const selector of selectors) {
       const element = document.querySelector(selector);
       if (element) {
         this.googleDocsEditor = element;
         console.log(`✅ Found Google Docs editor: ${selector}`);
-        break;
+        console.log("Editor element:", element);
+        return;
       }
     }
     
-    if (!this.googleDocsEditor) {
-      console.log("⚠️ Google Docs editor not found immediately, will keep searching");
-      // Retry after delay
+    console.log("⚠️ Google Docs editor not found immediately, will keep searching");
+    console.log("Available contentEditable elements:", 
+      Array.from(document.querySelectorAll('[contenteditable]')).map(el => ({
+        tag: el.tagName,
+        class: el.className,
+        editable: el.contentEditable
+      }))
+    );
+    
+    // Retry after delay
+    if (!this.findAttempts) this.findAttempts = 0;
+    this.findAttempts++;
+    
+    if (this.findAttempts < 10) {
       setTimeout(() => this.findGoogleDocsEditor(), 1000);
     }
   }
@@ -98,38 +145,56 @@ export class TypingAnalyser {
   }
   
   isInGoogleDocsEditor(target) {
-    // Multiple checks for Google Docs
-    if (!target) return false;
+    console.log("🔍 Checking if in editor...");
+    console.log("  Target:", target?.tagName, target?.className);
     
-    return (
-      // Direct contentEditable
-      target.isContentEditable ||
-      // Nested in contentEditable
-      target.closest('[contenteditable="true"]') ||
-      // Google Docs specific classes
-      target.closest('.kix-appview-editor') ||
-      target.closest('.docs-texteventtarget-iframe') ||
-      // Currently focused element
-      document.activeElement?.isContentEditable ||
-      // Our found editor
-      (this.googleDocsEditor && this.googleDocsEditor.contains(target))
-    );
+    if (!target) {
+      console.log("  ❌ No target");
+      return false;
+    }
+    
+    const checks = {
+      isContentEditable: target.isContentEditable,
+      hasContentEditableParent: !!target.closest('[contenteditable="true"]'),
+      hasDocsClass: !!target.closest('.kix-appview-editor'),
+      hasIframeClass: !!target.closest('.docs-texteventtarget-iframe'),
+      isActiveEditable: document.activeElement?.isContentEditable,
+      hasFoundEditor: this.googleDocsEditor && this.googleDocsEditor.contains(target),
+      // For iframe events, always accept
+      isFromIframe: target.ownerDocument !== document
+    };
+    
+    console.log("  Checks:", checks);
+    
+    const result = Object.values(checks).some(v => v);
+    console.log(result ? "  ✅ IN EDITOR" : "  ❌ NOT IN EDITOR");
+    
+    return result;
   }
   
   onKeyDown(event) {
-    if (!this.isInGoogleDocsEditor(event.target)) {
+    console.log("🎯 onKeyDown CALLED with key:", event.key);
+    
+    // For iframe events, always accept them
+    if (event.target.ownerDocument !== document) {
+      console.log("  ✅ Event from iframe - accepting");
+    } else if (!this.isInGoogleDocsEditor(event.target)) {
+      console.log("  ⏭️ Skipping - not in editor");
       return;
     }
+    
+    console.log("  ✅ Processing keystroke");
     
     const now = Date.now();
     const key = event.key;
     
     // Skip modifier keys
     if (key.length > 1 && !['Backspace', 'Enter', ' ', 'Tab', 'Delete'].includes(key)) {
+      console.log("  ⏭️ Skipping - modifier key");
       return;
     }
     
-    console.log(`Key down in Google Docs: ${key}`);
+    console.log(`  ⌨️ COUNTING KEY: ${key}`);
     
     // Store keydown time
     this.session.keyDownTimes.set(key, now);
@@ -145,7 +210,7 @@ export class TypingAnalyser {
           duration: interval, 
           timestamp: now 
         });
-        console.log(`⏸️ Pause detected: ${interval}ms`);
+        console.log(`  ⏸️ Pause detected: ${interval}ms`);
       }
       
       // Detect bursts (<200ms between keys)
@@ -159,13 +224,15 @@ export class TypingAnalyser {
         if (this.session.inBurst) {
           this.session.inBurst = false;
           const burstDuration = now - this.session.burstStartTime;
-          console.log(`⚡ Burst ended: ${burstDuration}ms, ${this.session.burstCount} keys`);
+          console.log(`  ⚡ Burst ended: ${burstDuration}ms, ${this.session.burstCount} keys`);
         }
       }
     }
     
     this.session.lastKeyDownTime = now;
     this.session.keystrokes++;
+    
+    console.log(`  📊 TOTAL KEYSTROKES NOW: ${this.session.keystrokes}`);
     
     // Track current word timing
     if (this.session.currentWord.startTime === 0) {
@@ -200,7 +267,8 @@ export class TypingAnalyser {
   }
   
   onInput(event) {
-    if (!this.isInGoogleDocsEditor(event.target)) {
+    // For iframe events, always accept
+    if (event.target.ownerDocument === document && !this.isInGoogleDocsEditor(event.target)) {
       return;
     }
     
@@ -359,4 +427,10 @@ export class TypingAnalyser {
     console.log("Google Docs editor found:", !!this.googleDocsEditor);
     return this.getSessionReport();
   }
+
+
+
+
+
+
 }

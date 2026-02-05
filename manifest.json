@@ -10,9 +10,13 @@
   "background": {"service_worker": "background.js"},
   
   "content_scripts": [{
-    "matches": ["https://docs.google.com/document/*"],
+      "matches": [
+      "https://docs.google.com/document/*",
+      "https://docs.google.com/document/u/*",
+      "*://docs.google.com/document/*"
+    ],
     "js": ["content.js"],
-    "type": "module",  
+
     "run_at": "document_idle"
   }],
 
@@ -28,7 +32,7 @@
   },
   
   "web_accessible_resources": [{
-    "resources": ["actions/*", "utils/*"],
+    "resources": ["actions/*", "utils/*", "agents/*", "icons/*"],
     "matches": ["https://docs.google.com/*"],
     "use_dynamic_url": true
   }]

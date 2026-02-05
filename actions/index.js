@@ -2,7 +2,6 @@
 export { GoogleDocsFocusMode } from './GoogleDocsFocusMode.js';
 export { TypingAnalyser } from './TypingAnalyser.js';
 
-// Optional: Agent class for future
 export class Agent {
   constructor() {
     this.actions = [];
