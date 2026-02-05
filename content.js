@@ -12,7 +12,7 @@ async function initEbbFlow() {
   try {
     // ========== DYNAMIC IMPORTS ==========
     const analyserUrl = chrome.runtime.getURL('actions/TypingAnalyser.js');
-    const rlAgentUrl = chrome.runtime.getURL('actions/ContextualBanditAgent.js');
+    const rlAgentUrl = chrome.runtime.getURL('agents/ContextualBanditAgent.js');
     const uiManagerUrl = chrome.runtime.getURL('actions/UIManager.js');
     const focusModeUrl = chrome.runtime.getURL('actions/GoogleDocsFocusMode.js');
     

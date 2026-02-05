@@ -34,53 +34,33 @@ export class TypingAnalyser {
   setupGoogleDocsListeners() {
     console.log("📡 Setting up Google Docs listeners...");
     
-    // Method 1: Find the editor
     this.findGoogleDocsEditor();
     
-    // Method 2: Find and listen to the hidden iframe
     const findAndAttachToIframe = () => {
       const iframe = document.querySelector('.docs-texteventtarget-iframe');
       
       if (iframe && iframe.contentDocument) {
-        console.log("✅ Found Google Docs input iframe!");
         const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
         
-        // Listen to iframe's document
-        iframeDoc.addEventListener('keydown', (e) => {
-          console.log("🌍 IFRAME KEYDOWN:", e.key);
-          this.onKeyDown(e);
-        }, true);
-        
+        iframeDoc.addEventListener('keydown', (e) => this.onKeyDown(e), true);
         iframeDoc.addEventListener('keyup', (e) => this.onKeyUp(e), true);
         iframeDoc.addEventListener('input', (e) => this.onInput(e), true);
         
-        console.log("✅ Listeners attached to iframe document");
+        console.log("✅ Iframe listeners attached");
       } else {
-        console.log("⚠️ Iframe not ready, retrying...");
         setTimeout(findAndAttachToIframe, 500);
       }
     };
     
-    // Also listen to main document (for fallback)
-    document.addEventListener('keydown', (e) => {
-      console.log("🌍 MAIN DOC KEYDOWN:", e.key);
-      this.onKeyDown(e);
-    }, true);
-    
+    document.addEventListener('keydown', (e) => this.onKeyDown(e), true);
     document.addEventListener('keyup', (e) => this.onKeyUp(e), true);
     document.addEventListener('input', (e) => this.onInput(e), true);
     
-    console.log("✅ Main document listeners attached");
-    
-    // Try to attach to iframe
     setTimeout(findAndAttachToIframe, 1000);
-    
-    // Method 3: MutationObserver
     this.setupMutationObserver();
   }
   
   findGoogleDocsEditor() {
-    // Try different Google Docs editor selectors
     const selectors = [
       '[contenteditable="true"]',
       '.kix-appview-editor',
@@ -89,28 +69,15 @@ export class TypingAnalyser {
       '.kix-cursor-caret'
     ];
     
-    console.log("🔍 Searching for Google Docs editor...");
-    
     for (const selector of selectors) {
       const element = document.querySelector(selector);
       if (element) {
         this.googleDocsEditor = element;
-        console.log(`✅ Found Google Docs editor: ${selector}`);
-        console.log("Editor element:", element);
+        console.log(`✅ Found editor: ${selector}`);
         return;
       }
     }
     
-    console.log("⚠️ Google Docs editor not found immediately, will keep searching");
-    console.log("Available contentEditable elements:", 
-      Array.from(document.querySelectorAll('[contenteditable]')).map(el => ({
-        tag: el.tagName,
-        class: el.className,
-        editable: el.contentEditable
-      }))
-    );
-    
-    // Retry after delay
     if (!this.findAttempts) this.findAttempts = 0;
     this.findAttempts++;
     
@@ -120,17 +87,15 @@ export class TypingAnalyser {
   }
   
   setupMutationObserver() {
-    // Watch for Google Docs editor to appear
     const observer = new MutationObserver((mutations) => {
       mutations.forEach((mutation) => {
         if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
           mutation.addedNodes.forEach(node => {
-            if (node.nodeType === 1) { // Element node
+            if (node.nodeType === 1) {
               if (node.isContentEditable || 
                   node.querySelector('[contenteditable="true"]') ||
                   node.classList?.contains('kix-appview-editor')) {
                 this.googleDocsEditor = node;
-                console.log("✅ Google Docs editor appeared via mutation");
               }
             }
           });
@@ -145,13 +110,7 @@ export class TypingAnalyser {
   }
   
   isInGoogleDocsEditor(target) {
-    console.log("🔍 Checking if in editor...");
-    console.log("  Target:", target?.tagName, target?.className);
-    
-    if (!target) {
-      console.log("  ❌ No target");
-      return false;
-    }
+    if (!target) return false;
     
     const checks = {
       isContentEditable: target.isContentEditable,
@@ -160,60 +119,38 @@ export class TypingAnalyser {
       hasIframeClass: !!target.closest('.docs-texteventtarget-iframe'),
       isActiveEditable: document.activeElement?.isContentEditable,
       hasFoundEditor: this.googleDocsEditor && this.googleDocsEditor.contains(target),
-      // For iframe events, always accept
       isFromIframe: target.ownerDocument !== document
     };
     
-    console.log("  Checks:", checks);
-    
-    const result = Object.values(checks).some(v => v);
-    console.log(result ? "  ✅ IN EDITOR" : "  ❌ NOT IN EDITOR");
-    
-    return result;
+    return Object.values(checks).some(v => v);
   }
   
   onKeyDown(event) {
-    console.log("🎯 onKeyDown CALLED with key:", event.key);
-    
-    // For iframe events, always accept them
-    if (event.target.ownerDocument !== document) {
-      console.log("  ✅ Event from iframe - accepting");
-    } else if (!this.isInGoogleDocsEditor(event.target)) {
-      console.log("  ⏭️ Skipping - not in editor");
+    if (event.target.ownerDocument === document && !this.isInGoogleDocsEditor(event.target)) {
       return;
     }
-    
-    console.log("  ✅ Processing keystroke");
     
     const now = Date.now();
     const key = event.key;
     
     // Skip modifier keys
     if (key.length > 1 && !['Backspace', 'Enter', ' ', 'Tab', 'Delete'].includes(key)) {
-      console.log("  ⏭️ Skipping - modifier key");
       return;
     }
     
-    console.log(`  ⌨️ COUNTING KEY: ${key}`);
-    
-    // Store keydown time
     this.session.keyDownTimes.set(key, now);
     
-    // Calculate timing
     if (this.session.lastKeyDownTime) {
       const interval = now - this.session.lastKeyDownTime;
       this.session.interKeyIntervals.push(interval);
       
-      // Detect pauses (>1.5 seconds)
       if (interval > 1500) {
         this.session.pauses.push({ 
           duration: interval, 
           timestamp: now 
         });
-        console.log(`  ⏸️ Pause detected: ${interval}ms`);
       }
       
-      // Detect bursts (<200ms between keys)
       if (interval < 200) {
         if (!this.session.inBurst) {
           this.session.inBurst = true;
@@ -221,26 +158,18 @@ export class TypingAnalyser {
           this.session.burstCount++;
         }
       } else {
-        if (this.session.inBurst) {
-          this.session.inBurst = false;
-          const burstDuration = now - this.session.burstStartTime;
-          console.log(`  ⚡ Burst ended: ${burstDuration}ms, ${this.session.burstCount} keys`);
-        }
+        this.session.inBurst = false;
       }
     }
     
     this.session.lastKeyDownTime = now;
     this.session.keystrokes++;
     
-    console.log(`  📊 TOTAL KEYSTROKES NOW: ${this.session.keystrokes}`);
-    
-    // Track current word timing
     if (this.session.currentWord.startTime === 0) {
       this.session.currentWord.startTime = now;
     }
     this.session.currentWord.keystrokes++;
     
-    // Track same character repeats (for stuck keys)
     if (key === this.lastKey && key.match(/[a-zA-Z0-9]/)) {
       this.session.sameCharRepeats++;
     }
@@ -258,39 +187,29 @@ export class TypingAnalyser {
         duration: holdTime
       });
       this.session.keyDownTimes.delete(key);
-      
-      // Log unusually long holds (potential struggling)
-      if (holdTime > 1000) {
-        console.log(`⏱️ Long key hold: ${key} for ${holdTime}ms`);
-      }
     }
   }
   
   onInput(event) {
-    // For iframe events, always accept
     if (event.target.ownerDocument === document && !this.isInGoogleDocsEditor(event.target)) {
       return;
     }
     
-    // Detect backspaces/deletions (error corrections)
     if (event.inputType === 'deleteContentBackward' || 
         event.inputType === 'deleteContentForward' ||
-        event.data === null) { // Deletion
+        event.data === null) {
       this.session.backspaces++;
       this.session.currentWord.backspaces++;
       
-      // Record correction timing
       if (this.session.lastKeyDownTime) {
         const correctionDelay = Date.now() - this.session.lastKeyDownTime;
         this.session.corrections.push({
           delay: correctionDelay,
           timestamp: Date.now()
         });
-        console.log(`↩️ Correction: ${correctionDelay}ms delay`);
       }
     }
     
-    // Word boundary detection (space, enter, punctuation)
     const target = event.target;
     const text = target.textContent || target.innerText || '';
     const lastChar = text.charAt(text.length - 1);
@@ -298,7 +217,6 @@ export class TypingAnalyser {
     if (lastChar === ' ' || lastChar === '\n' || /[.,!?;:]/.test(lastChar)) {
       this.finalizeWord();
     } else {
-      // Update current word text
       this.session.currentWord.text = text.trim().split(/\s+/).pop() || '';
     }
     
@@ -316,10 +234,8 @@ export class TypingAnalyser {
       };
       
       this.session.words.push(word);
-      console.log(`📝 Word completed: "${word.text}" (${word.duration}ms)`);
     }
     
-    // Reset for next word
     this.session.currentWord = { 
       text: '', 
       startTime: Date.now(), 
@@ -333,7 +249,6 @@ export class TypingAnalyser {
     const mean = intervals.length > 0 ? 
       intervals.reduce((a, b) => a + b, 0) / intervals.length : 0;
     
-    // Calculate rhythm metrics
     let rhythmConsistency = 0;
     if (intervals.length > 1) {
       let varianceSum = 0;
@@ -391,7 +306,7 @@ export class TypingAnalyser {
         totalBackspaces: report.totalBackspaces,
         wordsCompleted: report.wordsCompleted,
         errorRate: report.errorRate,
-        typingSpeed: report.totalKeystrokes / (report.sessionDuration / 60000) // keystrokes per minute
+        typingSpeed: report.totalKeystrokes / (report.sessionDuration / 60000)
       },
       metrics: {
         timing: report.timing,
@@ -399,7 +314,6 @@ export class TypingAnalyser {
         rhythm: report.rhythm
       },
       anonymizedPatterns: {
-        // No actual text, just patterns
         pausePatterns: this.session.pauses.map(p => ({
           duration: p.duration,
           relativeTime: p.timestamp - this.session.startTime
@@ -415,7 +329,6 @@ export class TypingAnalyser {
     };
   }
   
-  // Helper for debugging
   debug() {
     console.log("=== TypingAnalyser Debug ===");
     console.log("Session stats:", {
@@ -427,10 +340,4 @@ export class TypingAnalyser {
     console.log("Google Docs editor found:", !!this.googleDocsEditor);
     return this.getSessionReport();
   }
-
-
-
-
-
-
 }

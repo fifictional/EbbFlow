@@ -1,7 +1,7 @@
 // utils/messaging.js - Message handler utilities
 export function createMessageHandler(actions = {}) {
   return function messageHandler(request, sender, sendResponse) {
-    console.log("📩 Message received:", request.action);
+    console.log("Message received:", request.action);
     
     switch(request.action) {
       case 'ping':

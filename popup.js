@@ -98,7 +98,7 @@ document.addEventListener('DOMContentLoaded', function() {
           console.log('Focus mode toggled:', response.active);
           if (focusModeBtn) {
             focusModeBtn.textContent = response.active ? 
-              '🧠 Focus Mode: ON' : '🧠 Focus Mode: OFF';
+              'Focus Mode: ON' : 'Focus Mode: OFF';
           }
           showMessage(response.active ? 'Focus mode enabled!' : 'Focus mode disabled');
         }
