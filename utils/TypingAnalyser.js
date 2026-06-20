@@ -4,35 +4,33 @@ export class TypingAnalyser {
     this.resetSession();
     this.lastKey = '';
     this.googleDocsEditor = null;
-    console.log("✅ TypingAnalyser initialized for Google Docs");
+    console.log(" TypingAnalyser initialized for Google Docs");
   }
   
-  resetSession() {
-    this.session = {
-      startTime: Date.now(),
-      keystrokes: 0,
-      backspaces: 0,
-      words: [],
-      currentWord: { text: '', startTime: 0, keystrokes: 0, backspaces: 0 },
-      
-      keyDownTimes: new Map(),
-      interKeyIntervals: [],
-      holdTimes: [],
-      pauses: [],
-      lastKeyDownTime: null,
-      
-      corrections: [],
-      sameCharRepeats: 0,
-      lastChar: '',
-      
-      burstCount: 0,
-      inBurst: false,
-      burstStartTime: 0
-    };
-  }
-  
+resetSession() {
+  this.session = {
+    startTime: Date.now(),
+    keystrokes: 0,
+    backspaces: 0,
+    words: [],
+    currentWord: { text: '', startTime: 0, keystrokes: 0, backspaces: 0 },
+    keyDownTimes: new Map(),
+    interKeyIntervals: [],
+    holdTimes: [],
+    pauses: [],
+    lastKeyDownTime: null,
+    corrections: [],
+    sameCharRepeats: 0,
+    lastChar: '',
+    burstCount: 0,
+    inBurst: false,
+    burstStartTime: 0
+  };
+  this.lastKey = '';  
+  return { success: true };
+}
   setupGoogleDocsListeners() {
-    console.log("📡 Setting up Google Docs listeners...");
+    console.log("Setting up Google Docs listeners...");
     
     this.findGoogleDocsEditor();
     
@@ -46,7 +44,7 @@ export class TypingAnalyser {
         iframeDoc.addEventListener('keyup', (e) => this.onKeyUp(e), true);
         iframeDoc.addEventListener('input', (e) => this.onInput(e), true);
         
-        console.log("✅ Iframe listeners attached");
+        console.log(" Iframe listeners attached");
       } else {
         setTimeout(findAndAttachToIframe, 500);
       }
@@ -73,7 +71,7 @@ export class TypingAnalyser {
       const element = document.querySelector(selector);
       if (element) {
         this.googleDocsEditor = element;
-        console.log(`✅ Found editor: ${selector}`);
+        console.log(`Found editor: ${selector}`);
         return;
       }
     }

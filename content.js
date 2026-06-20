@@ -14,7 +14,7 @@ async function initEbbFlow() {
   try {
     // ========== DYNAMIC IMPORTS ==========
     const analyserUrl = chrome.runtime.getURL('utils/TypingAnalyser.js');
-    const rlAgentUrl = chrome.runtime.getURL('agents/ContextualBanditAgent.js');
+    const rlAgentUrl = chrome.runtime.getURL('agents/HybridBandit.js');
     const uiManagerUrl = chrome.runtime.getURL('utils/UIManager.js');
     const focusModeUrl = chrome.runtime.getURL('actions/GoogleDocsFocusMode.js');
     
@@ -41,6 +41,9 @@ async function initEbbFlow() {
       analyser.setupGoogleDocsListeners();
     }, 2000);
     
+          
+    let prevMetrics = null;
+    let prevAction = null; 
     async function setupRL() {
       const rlAgent = new ContextualBanditAgent();
       
@@ -48,9 +51,7 @@ async function initEbbFlow() {
       if (saved.banditModels) {
         rlAgent.load(saved.banditModels);
       }
-      
-      let prevMetrics = null;
-      let prevAction = null;  
+ 
 
       // make sure global timers object exists
       window.EbbFlow = window.EbbFlow || {};
@@ -114,8 +115,16 @@ async function initEbbFlow() {
       const actions = {
         'ping': () => ({ status: 'ready', time: Date.now() }),
         'getTypingData': () => analyser.getSessionReport(),
-        'resetSession': () => analyser.resetSession(),
-        'toggleFocusMode': () => focusMode.toggle(),
+        'resetSession': () => {
+          analyser.resetSession();
+          rlAgent.history = [];
+          rlAgent.baseline = 0;
+          prevMetrics = null; 
+          prevAction = null;
+          chrome.storage.local.remove(['banditModels']);
+          return { success: true };
+        },
+        'exportData': () => ({data: analyser.exportSessionData()}),
         'getRLState': () => ({
           contextsLearned: Object.keys(rlAgent.models).length,
           baseline: rlAgent.baseline,

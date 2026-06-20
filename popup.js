@@ -20,13 +20,11 @@ document.addEventListener('DOMContentLoaded', function() {
   const statsElement = document.getElementById('stats');
   const resetBtn = document.getElementById('resetBtn');
   const exportBtn = document.getElementById('exportBtn');
-  const focusModeBtn = document.getElementById('focusModeBtn'); 
   
   console.log('Elements found:', {
     stats: statsElement ? 'FOUND' : 'MISSING',
     resetBtn: resetBtn ? 'FOUND' : 'MISSING', 
-    exportBtn: exportBtn ? 'FOUND' : 'MISSING',
-    focusModeBtn: focusModeBtn ? 'FOUND' : 'MISSING'  
+    exportBtn: exportBtn ? 'FOUND' : 'MISSING',  
   });
   
   if (!statsElement) {
@@ -35,15 +33,6 @@ document.addEventListener('DOMContentLoaded', function() {
     return;
   }
   
-  if (focusModeBtn) {
-    focusModeBtn.addEventListener('click', function() {
-      console.log('Focus mode button clicked');
-      toggleFocusMode();
-    });
-    focusModeBtn.style.background = '#4A90E2';
-    focusModeBtn.style.color = 'white';
-    focusModeBtn.style.marginBottom = '10px';
-  }
   
   if (resetBtn) {
     resetBtn.addEventListener('click', function() {
@@ -64,37 +53,7 @@ document.addEventListener('DOMContentLoaded', function() {
   updateStats();
   setInterval(updateStats, 3000);
   
-  // ========== NEW FUNCTION: TOGGLE FOCUS MODE ==========
-  function toggleFocusMode() {
-    console.log('Toggling focus mode...');
-    showMessage('Toggling focus mode...');
-    
-    chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
-      if (!tabs || tabs.length === 0) {
-        showMessage('No active tab found');
-        return;
-      }
-      
-      const tab = tabs[0];
-      console.log('Sending focus mode toggle to:', tab.url);
-      
-      chrome.tabs.sendMessage(tab.id, {action: 'toggleFocusMode'}, function(response) {
-        const error = chrome.runtime.lastError;
-        if (error) {
-          console.error('Focus mode error:', error.message);
-          showMessage('Focus mode failed: ' + error.message);
-        } else if (response) {
-          console.log('Focus mode toggled:', response.active);
-          if (focusModeBtn) {
-            focusModeBtn.textContent = response.active ? 
-              'Focus Mode: ON' : 'Focus Mode: OFF';
-          }
-          showMessage(response.active ? 'Focus mode enabled!' : 'Focus mode disabled');
-        }
-      });
-    });
-  }
-  
+
   // ========== update stats ==========
   function updateStats() {
     console.log('Updating stats...');
@@ -118,7 +77,7 @@ document.addEventListener('DOMContentLoaded', function() {
       if (!url.includes('docs.google.com/document/')) {
         showMessage(`
           <div style="padding: 15px; text-align: center;">
-            <h3>📝 Open Google Docs</h3>
+            <h3> Open Google Docs</h3>
             <p>Please open a <strong>Google Document</strong> to use EbbFlow</p>
             <p><small>Current page: ${url.substring(0, 50)}...</small></p>
           </div>
@@ -136,7 +95,7 @@ document.addEventListener('DOMContentLoaded', function() {
           
           showMessage(`
             <div style="padding: 15px; text-align: center;">
-              <h3>🔧 Setup Required</h3>
+              <h3> Setup Required</h3>
               <p>EbbFlow needs a quick setup on Google Docs:</p>
               <ol style="text-align: left; margin: 15px;">
                 <li>Make sure you're in a Google <strong>document</strong></li>
@@ -175,7 +134,6 @@ document.addEventListener('DOMContentLoaded', function() {
   
   function handleReset() {
     console.log('Resetting session...');
-    showMessage('Resetting session...');
     
     chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
       if (!tabs || tabs.length === 0) {
@@ -203,6 +161,7 @@ document.addEventListener('DOMContentLoaded', function() {
       });
     });
   }
+  
   
   function handleExport() {
     console.log('Exporting data...');
