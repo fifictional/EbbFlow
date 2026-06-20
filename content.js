@@ -32,8 +32,8 @@ async function initEbbFlow() {
     
     // ========== INITIALISE COMPONENTS ==========
     const analyser = new TypingAnalyser();
-    const uiManager = new UIManager();
     const focusMode = new GoogleDocsFocusMode();
+    const uiManager = new UIManager(focusMode);
     
     
     // Start analyser
@@ -110,6 +110,25 @@ async function initEbbFlow() {
       isRLRunning: true
     });
     
+    // ========== CLEANUP ==========
+    function stopRL() {
+      if (window.EbbFlow?.rlAgent) {
+        const saved = window.EbbFlow.rlAgent.save();
+        chrome.storage.local.set({ banditModels: saved });
+      }
+      if (window.EbbFlow?.timers?.rlInterval) {
+        clearInterval(window.EbbFlow.timers.rlInterval);
+        window.EbbFlow.timers.rlInterval = null;
+      }
+      if (window.EbbFlow?.timers?.autosave) {
+        clearInterval(window.EbbFlow.timers.autosave);
+        window.EbbFlow.timers.autosave = null;
+      }
+      if (window.EbbFlow) window.EbbFlow.isRLRunning = false;
+    }
+
+    window.addEventListener('beforeunload', stopRL);
+
     // ========== MESSAGE HANDLER ==========
     chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       const actions = {
@@ -132,16 +151,7 @@ async function initEbbFlow() {
           stats: rlAgent.getStats()
         }),
         'stopRL': () => {
-          // clear stored timers
-          if (window.EbbFlow?.timers?.rlInterval) {
-            clearInterval(window.EbbFlow.timers.rlInterval);
-            window.EbbFlow.timers.rlInterval = null;
-          }
-          if (window.EbbFlow?.timers?.autosave) {
-            clearInterval(window.EbbFlow.timers.autosave);
-            window.EbbFlow.timers.autosave = null;
-          }
-          window.EbbFlow.isRLRunning = false;
+          stopRL();
           return { status: 'rl_stopped' };
         }
       };
@@ -155,19 +165,7 @@ async function initEbbFlow() {
       return true;
     });
     
-    // ========== CLEANUP ==========
-    window.addEventListener('beforeunload', () => {
-      if (window.EbbFlow?.rlAgent) {
-        const saved = window.EbbFlow.rlAgent.save();
-        chrome.storage.local.set({ banditModels: saved });
-      }
-      if (window.EbbFlow?.timers?.rlInterval) {
-        clearInterval(window.EbbFlow.timers.rlInterval);
-      }
-      if (window.EbbFlow?.timers?.autosave) {
-        clearInterval(window.EbbFlow.timers.autosave);
-      }
-    });
+
 
     // Add visual marker
     uiManager.addVisualMarker();

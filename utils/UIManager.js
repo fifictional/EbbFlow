@@ -1,7 +1,8 @@
 // Manages all UI interactions and visual effects
 export class UIManager {
-  constructor() {
+  constructor(focusMode) {
     this.currentMessages = new Set();
+    this.focusMode = focusMode;
   }
   
   executeAction(action) {
@@ -67,12 +68,8 @@ export class UIManager {
   }
 
     enableFocusMode() {
-    console.log("UIManager: Calling GoogleDocsFocusMode...");
-    if (window.EbbFlow && window.EbbFlow.focusMode) {
-      window.EbbFlow.focusMode.toggle();
-      console.log("GoogleDocsFocusMode.toggle() called");
-    } else {
-      console.error("GoogleDocsFocusMode not found in window.EbbFlow");
+    if (this.focusMode) {
+      this.focusMode.toggle();
     }
   }
 

@@ -1,4 +1,4 @@
-// actions/TypingAnalyser.js 
+// utils/TypingAnalyser.js 
 export class TypingAnalyser {
   constructor() {
     this.resetSession();

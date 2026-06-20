@@ -13,6 +13,16 @@ function showMessage(message) {
   }
 }
 // ------------------------
+function withActiveTab(callback) {
+  chrome.tabs.query({active: true, currentWindow: true}, (tabs) => {
+    if (!tabs || tabs.length === 0) {
+      showMessage('No active tab');
+      return;
+    }
+    callback(tabs[0]);
+  });
+}
+// ------------------------
 // Wait for DOM to be fully ready
 document.addEventListener('DOMContentLoaded', function() {
   console.log('DOM fully loaded');
@@ -56,23 +66,13 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // ========== update stats ==========
   function updateStats() {
-    console.log('Updating stats...');
-    
-    chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
-      if (!tabs || tabs.length === 0) {
-        showMessage('No active tab');
-        return;
-      }
-      
-      const tab = tabs[0];
+    withActiveTab((tab) => {
       const url = tab.url || '';
       
       if (url.startsWith('chrome://') || url.startsWith('about:') || url.startsWith('arc://')) {
         showMessage('Please open Google Docs');
         return;
       }
-      
-      console.log('Checking page:', url);
       
       if (!url.includes('docs.google.com/document/')) {
         showMessage(`
@@ -85,14 +85,8 @@ document.addEventListener('DOMContentLoaded', function() {
         return;
       }
       
-      console.log('Requesting data from Google Docs');
-      
-      chrome.tabs.sendMessage(tab.id, {action: 'ping'}, function(pingResponse) {
-        const pingError = chrome.runtime.lastError;
-        
-        if (pingError) {
-          console.log('Content script not ready:', pingError.message);
-          
+      chrome.tabs.sendMessage(tab.id, {action: 'ping'}, (pingResponse) => {
+        if (chrome.runtime.lastError) {
           showMessage(`
             <div style="padding: 15px; text-align: center;">
               <h3> Setup Required</h3>
@@ -110,19 +104,13 @@ document.addEventListener('DOMContentLoaded', function() {
           return;
         }
         
-        // Content script is ready, get data
-        console.log('Content script ready, requesting data');
-        chrome.tabs.sendMessage(tab.id, {action: 'getTypingData'}, function(response) {
-          const error = chrome.runtime.lastError;
-          
-          if (error) {
-            console.log('Data request failed:', error.message);
+        chrome.tabs.sendMessage(tab.id, {action: 'getTypingData'}, (response) => {
+          if (chrome.runtime.lastError) {
             showMessage('Start typing in Google Docs to see analytics!');
             return;
           }
           
           if (response) {
-            console.log('Data received:', response.totalKeystrokes, 'keystrokes');
             displayStats(response);
           } else {
             showMessage('Start typing to see analytics!');
@@ -133,28 +121,16 @@ document.addEventListener('DOMContentLoaded', function() {
   }
   
   function handleReset() {
-    console.log('Resetting session...');
-    
-    chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
-      if (!tabs || tabs.length === 0) {
-        showMessage('No active tab found');
-        return;
-      }
-      
-      const tab = tabs[0];
-      
+    withActiveTab((tab) => {
       if (!tab.url.includes('docs.google.com/document/')) {
         showMessage('Please open Google Docs to reset session');
         return;
       }
       
-      chrome.tabs.sendMessage(tab.id, {action: 'resetSession'}, function(response) {
-        const error = chrome.runtime.lastError;
-        if (error) {
-          console.error('Reset error:', error.message);
-          showMessage('Reset failed: ' + error.message);
+      chrome.tabs.sendMessage(tab.id, {action: 'resetSession'}, () => {
+        if (chrome.runtime.lastError) {
+          showMessage('Reset failed: ' + chrome.runtime.lastError.message);
         } else {
-          console.log('Reset successful');
           showMessage('Session reset!');
           setTimeout(updateStats, 1000);
         }
@@ -164,33 +140,19 @@ document.addEventListener('DOMContentLoaded', function() {
   
   
   function handleExport() {
-    console.log('Exporting data...');
-    
-    chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
-      if (!tabs || tabs.length === 0) {
-        alert('No active tab found');
-        return;
-      }
-      
-      const tab = tabs[0];
-      
-      // Check Google Docs
+    withActiveTab((tab) => {
       if (!tab.url.includes('docs.google.com/document/')) {
         alert('Please open Google Docs to export data');
         return;
       }
       
-      chrome.tabs.sendMessage(tab.id, {action: 'exportData'}, function(response) {
-        const error = chrome.runtime.lastError;
-        if (error) {
-          console.error('Export error:', error.message);
-          alert('Export failed: ' + error.message);
+      chrome.tabs.sendMessage(tab.id, {action: 'exportData'}, (response) => {
+        if (chrome.runtime.lastError) {
+          alert('Export failed: ' + chrome.runtime.lastError.message);
           return;
         }
         
         if (response && response.data) {
-          console.log('Export data received');
-          
           const dataStr = JSON.stringify(response.data, null, 2);
           const dataBlob = new Blob([dataStr], {type: 'application/json'});
           const dataUrl = URL.createObjectURL(dataBlob);
