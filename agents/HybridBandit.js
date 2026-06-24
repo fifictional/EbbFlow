@@ -1,116 +1,177 @@
 import { config } from './config.js';
-import { extractContext } from './context-extractor.js';
 import { getHeuristicAction } from './heuristic-policy.js';
 import { calculateReward } from './reward-calculator.js';
 
+// ========================================
+//  Linear algebra helpers (d <= 4)
+// ========================================
+
+function matIdentity(n) {
+  return Array.from({ length: n }, (_, i) =>
+    Array.from({ length: n }, (_, j) => (i === j ? 1 : 0))
+  );
+}
+
+function matCopy(A) {
+  return A.map(row => [...row]);
+}
+
+function cholesky(A) {
+  const n = A.length;
+  const L = Array.from({ length: n }, () => new Array(n).fill(0));
+  for (let i = 0; i < n; i++) {
+    for (let j = 0; j <= i; j++) {
+      let sum = 0;
+      for (let k = 0; k < j; k++) sum += L[i][k] * L[j][k];
+      if (i === j) {
+        L[i][j] = Math.sqrt(A[i][i] - sum);
+      } else {
+        L[i][j] = (A[i][j] - sum) / L[j][j];
+      }
+    }
+  }
+  return L;
+}
+
+function forwardSub(L, b) {
+  const n = b.length;
+  const x = new Array(n);
+  for (let i = 0; i < n; i++) {
+    let sum = 0;
+    for (let j = 0; j < i; j++) sum += L[i][j] * x[j];
+    x[i] = (b[i] - sum) / L[i][i];
+  }
+  return x;
+}
+
+function backSub(U, b) {
+  const n = b.length;
+  const x = new Array(n);
+  for (let i = n - 1; i >= 0; i--) {
+    let sum = 0;
+    for (let j = i + 1; j < n; j++) sum += U[i][j] * x[j];
+    x[i] = (b[i] - sum) / U[i][i];
+  }
+  return x;
+}
+
+function transpose(A) {
+  const n = A.length;
+  return Array.from({ length: n }, (_, i) => A.map(row => row[i]));
+}
+
+function dot(a, b) {
+  let sum = 0;
+  for (let i = 0; i < a.length; i++) sum += a[i] * b[i];
+  return sum;
+}
+
+function outerAdd(A, x) {
+  const n = x.length;
+  for (let i = 0; i < n; i++) {
+    for (let j = 0; j < n; j++) {
+      A[i][j] += x[i] * x[j];
+    }
+  }
+}
+
+function vecAdd(v, s, x) {
+  for (let i = 0; i < v.length; i++) v[i] += s * x[i];
+}
+
+// Box-Muller standard normal draw
+function randn() {
+  let u = 0, v = 0;
+  while (u === 0) u = Math.random();
+  while (v === 0) v = Math.random();
+  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+}
+
+// ========================================
+//  Main agent
+// ========================================
+
 export class ContextualBanditAgent {
   constructor() {
-    this.actions = config.actions;
-    this.models = {};
+    const lc = config.lints;
+    this.d = lc.featureCount;
+    this.lambda = lc.lambda;
+    this.alpha = lc.alpha;
+    this.heuristicDecisions = lc.heuristicDecisions;
+    this.actions = [...config.actions];
     this.history = [];
-    this.baseline = 'hybrid';
-    this.priors = config.priors;
-    console.log("hybrid cold-start agent initialised");
+    this.baseline = 'lints';
+    this.reset();
+    console.log("LinTS agent initialised");
   }
 
-  initializeContext(context) {
-    if (this.models[context]) return;
-
-    this.models[context] = {};
+  reset() {
+    const I = matIdentity(this.d);
+    this.models = {};
     this.actions.forEach(action => {
-      const prior = this.priors[action];
-      this.models[context][action] = {
-        alpha: prior.alpha,
-        beta: prior.beta,
+      this.models[action] = {
+        A: matCopy(I).map(row => row.map(v => v * this.lambda)),
+        b: new Array(this.d).fill(0),
         trials: 0,
       };
     });
+    this.lastAction = null;
+    this.lastFeatures = null;
+    this.lastPhase = null;
   }
 
-  getContextConfidence(context) {
-    if (!this.models[context]) return 0;
-    return Object.values(this.models[context])
-      .reduce((sum, m) => sum + m.trials, 0);
+  extractFeatures(metrics) {
+    return [
+      1,
+      metrics.rhythmConsistency,
+      metrics.pauseFrequency,
+      metrics.correctionsCount,
+    ];
+  }
+
+  solveLin(A, b) {
+    const L = cholesky(A);
+    const y = forwardSub(L, b);
+    return backSub(transpose(L), y);
+  }
+
+  samplePosterior(A) {
+    const L = cholesky(A);
+    const z = Array.from({ length: this.d }, () => randn());
+    const y = backSub(transpose(L), z);
+    return y.map(v => v * this.alpha);
   }
 
   chooseAction(metrics) {
-    const schedule = config.phaseSchedule;
-    const decisionCount = this.history.length;
-    const context = extractContext(metrics);
+    const x = this.extractFeatures(metrics);
+    this.lastFeatures = x;
+    this.lastPhase = null;
 
-    let action;
-
-    if (decisionCount < schedule.decisionsHeuristicOnly) {
-      action = getHeuristicAction(metrics);
-      this.lastPhase = 'heuristic_only';
-    } else if (decisionCount < schedule.decisionsTestBandit) {
-      if (Math.random() < schedule.banditExploreRate) {
-        action = this.thompsonSampling(context);
-        this.lastPhase = 'test_bandit';
-      } else {
-        action = getHeuristicAction(metrics);
-        this.lastPhase = 'heuristic_primary';
-      }
-    } else {
-      const confidence = this.getContextConfidence(context);
-      const banditWeight = Math.min(confidence / schedule.confidencePerTrial, schedule.banditMaxWeight);
-
-      if (Math.random() < banditWeight) {
-        action = this.thompsonSampling(context);
-        this.lastPhase = 'bandit_primary';
-      } else {
-        action = getHeuristicAction(metrics);
-        this.lastPhase = 'heuristic_safety';
-      }
+    if (this.history.length < this.heuristicDecisions) {
+      const action = getHeuristicAction(metrics);
+      this.lastAction = action;
+      this.lastPhase = 'heuristic';
+      return action;
     }
 
-    this.lastContext = context;
-    this.lastAction = action;
-    return action;
-  }
-
-  thompsonSampling(context) {
-    this.initializeContext(context);
-
     let bestAction = 'do_nothing';
-    let bestSample = -1;
+    let bestScore = -Infinity;
 
     for (const action of this.actions) {
-      const model = this.models[context][action];
-      const sample = this.sampleBeta(model.alpha, model.beta);
+      const m = this.models[action];
+      const theta = this.solveLin(m.A, m.b);
+      const perturbation = this.samplePosterior(m.A);
+      const score = dot(theta, x) + dot(perturbation, x);
 
-      if (sample > bestSample) {
-        bestSample = sample;
+      if (score > bestScore) {
+        bestScore = score;
         bestAction = action;
       }
     }
 
+    this.lastAction = bestAction;
+    this.lastPhase = 'lints';
     return bestAction;
-  }
-
-  sampleBeta(alpha, beta) {
-    const sampleGamma = (shape) => {
-      let d = shape - 1/3;
-      let c = 1 / Math.sqrt(9 * d);
-
-      let x, v, u;
-      do {
-        do {
-          x = Math.random() * 2 - 1;
-        } while (Math.abs(x) < 1e-10);
-        v = 1 + c * x;
-      } while (v <= 0);
-
-      v = v * v * v;
-      u = Math.random();
-
-      if (u < 1 - 0.0331 * x * x * x * x) return d * v;
-      if (Math.log(u) < 0.5 * x * x + d * (1 - v + Math.log(v))) return d * v;
-
-      return sampleGamma(shape);
-    };
-
-    return sampleGamma(alpha) / (sampleGamma(alpha) + sampleGamma(beta));
   }
 
   calculateReward(prevMetrics, currentMetrics, actionTaken) {
@@ -118,32 +179,25 @@ export class ContextualBanditAgent {
   }
 
   learn(reward) {
-    if (!this.lastContext || !this.lastAction) return;
+    if (!this.lastAction || !this.lastFeatures) return;
 
-    const context = this.lastContext;
-    const action = this.lastAction;
+    const m = this.models[this.lastAction];
+    const x = this.lastFeatures;
 
-    this.initializeContext(context);
-
-    const model = this.models[context][action];
-
-    if (reward > 0) {
-      model.alpha += 1;
-    } else {
-      model.beta += 1;
-    }
-    model.trials += 1;
+    outerAdd(m.A, x);
+    vecAdd(m.b, reward, x);
+    m.trials += 1;
 
     this.history.push({
-      context,
-      action,
+      action: this.lastAction,
+      features: [...x],
       reward,
       phase: this.lastPhase,
       timestamp: Date.now(),
     });
 
-    this.lastContext = null;
     this.lastAction = null;
+    this.lastFeatures = null;
   }
 
   getStats() {
@@ -154,18 +208,18 @@ export class ContextualBanditAgent {
 
     const phaseDistribution = {};
     const actionCounts = {};
-    const contextCounts = {};
 
     this.history.forEach(h => {
       phaseDistribution[h.phase] = (phaseDistribution[h.phase] || 0) + 1;
       actionCounts[h.action] = (actionCounts[h.action] || 0) + 1;
-      contextCounts[h.context] = (contextCounts[h.context] || 0) + 1;
     });
 
-    const contextConfidence = {};
-    for (const [ctx, actions] of Object.entries(this.models)) {
-      const trials = Object.values(actions).reduce((sum, m) => sum + m.trials, 0);
-      contextConfidence[ctx] = trials;
+    const weights = {};
+    const totalTrials = {};
+    for (const [action, m] of Object.entries(this.models)) {
+      const theta = this.solveLin(m.A, m.b);
+      weights[action] = theta;
+      totalTrials[action] = m.trials;
     }
 
     return {
@@ -173,9 +227,8 @@ export class ContextualBanditAgent {
       averageReward: avgReward,
       phaseDistribution,
       actionDistribution: actionCounts,
-      contextConfidence,
-      uniqueContexts: Object.keys(this.models).length,
-      currentPhase: this.lastPhase,
+      weights,
+      totalTrials,
     };
   }
 
@@ -191,9 +244,9 @@ export class ContextualBanditAgent {
     try {
       const saved = JSON.parse(data);
       this.models = saved.models || {};
-      this.baseline = saved.baseline || 'hybrid';
+      this.baseline = saved.baseline || 'lints';
       this.history = saved.history || [];
-      console.log(`loaded ${Object.keys(this.models).length} contexts`);
+      console.log(`loaded LinTS models for ${Object.keys(this.models).length} actions`);
       return true;
     } catch {
       return false;
