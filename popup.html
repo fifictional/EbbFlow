@@ -320,6 +320,67 @@ Copy
       transform: scale(0.97);
     }
 
+    /* Privacy toggle */
+    .privacy-bar {
+      padding: 6px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-top: 1px solid var(--border);
+    }
+
+    .privacy-label {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .privacy-label .icon {
+      font-size: 12px;
+    }
+
+    .toggle-wrap {
+      position: relative;
+      width: 36px;
+      height: 20px;
+      cursor: pointer;
+    }
+
+    .toggle-track {
+      width: 36px;
+      height: 20px;
+      border-radius: 10px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      transition: background 0.2s, border-color 0.2s;
+    }
+
+    .toggle-track.active {
+      background: var(--accent);
+      border-color: var(--accent);
+    }
+
+    .toggle-knob {
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: var(--text);
+      transition: left 0.2s;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+    }
+
+    .toggle-track.active + .toggle-knob,
+    .toggle-wrap.active .toggle-knob {
+      left: 18px;
+    }
+
     /* Fade in animation */
     @keyframes fadeUp {
       from { opacity: 0; transform: translateY(6px); }
@@ -354,6 +415,17 @@ Copy
     <div class="loading-state">
       <div class="spinner"></div>
       <span>connecting...</span>
+    </div>
+  </div>
+
+  <div class="privacy-bar" id="privacyBar">
+    <div class="privacy-label">
+      <span class="icon">🔒</span>
+      Privacy Mode
+    </div>
+    <div class="toggle-wrap" id="privacyToggle">
+      <div class="toggle-track"></div>
+      <div class="toggle-knob"></div>
     </div>
   </div>
 

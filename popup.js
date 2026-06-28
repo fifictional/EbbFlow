@@ -42,7 +42,27 @@ document.addEventListener('DOMContentLoaded', function() {
     document.body.innerHTML = '<p style="color:red;padding:20px;">ERROR: Missing #stats element</p>';
     return;
   }
-  
+
+  // ========== Privacy toggle ==========
+  const privacyToggle = document.getElementById('privacyToggle');
+  const privacyIcon = document.querySelector('.privacy-label .icon');
+
+  function setPrivacyMode(enabled) {
+    chrome.storage.local.set({ privacyMode: enabled });
+    privacyToggle.classList.toggle('active', enabled);
+    privacyToggle.querySelector('.toggle-track').classList.toggle('active', enabled);
+    privacyIcon.textContent = enabled ? '🔓' : '🔒';
+  }
+
+  chrome.storage.local.get(['privacyMode'], (result) => {
+    setPrivacyMode(result.privacyMode === true);
+  });
+
+  privacyToggle.addEventListener('click', () => {
+    const isActive = !privacyToggle.classList.contains('active');
+    setPrivacyMode(isActive);
+  });
+
   
   if (resetBtn) {
     resetBtn.addEventListener('click', function() {
